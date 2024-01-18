@@ -1163,16 +1163,16 @@ void SetNumOfVOCs(uint8_t numofPID) {
     pid2en = 0;
     EEPROM.update(ADDR_PID1_EN, pid1en);
     EEPROM.update(ADDR_PID2_EN, pid2en);
-    if (RAMP == deviceType) {
-      co2sel = EEPROM.read(ADDR_CO2SEL);
-      if (co2sel == ONLY_CO2_SELECTED) {
-        co2sel = CO2_VOC_SELECTED;
-        EEPROM.write(ADDR_CO2SEL, co2sel);
-      } else {
-        co2sel = ONLY_VOC_SELECTED;
-        EEPROM.write(ADDR_CO2SEL, co2sel);
-      }
-    }
+//    if (RAMP == deviceType) {
+//      co2sel = EEPROM.read(ADDR_CO2SEL);
+//      if (co2sel == ONLY_CO2_SELECTED) {
+//       co2sel = CO2_VOC_SELECTED;
+//        EEPROM.write(ADDR_CO2SEL, co2sel);
+//      } else {
+//        co2sel = ONLY_VOC_SELECTED;
+//        EEPROM.write(ADDR_CO2SEL, co2sel);
+//      }
+//    }
     SerialPrint(F("PID1 Enabled"), USB_UART_PORT, 1, 0, 0);
   } else if ((2 == numofPID) && (echemnum == 0)) {
     pid1en = 1;
@@ -1195,16 +1195,16 @@ void SetNumOfVOCs(uint8_t numofPID) {
     pid2en = 0;
     EEPROM.update(ADDR_PID1_EN, pid1en);
     EEPROM.update(ADDR_PID2_EN, pid2en);
-    if (RAMP == deviceType) {
-      co2sel = EEPROM.read(ADDR_CO2SEL);
-      if (co2sel == CO2_VOC_SELECTED) {
-        co2sel = ONLY_CO2_SELECTED;
-        EEPROM.write(ADDR_CO2SEL, co2sel);
-      } else {
-        co2sel = NO_CO2_VOC;
-        EEPROM.write(ADDR_CO2SEL, co2sel);
-      }
-    }
+//    if (RAMP == deviceType) {
+//      co2sel = EEPROM.read(ADDR_CO2SEL);
+//      if (co2sel == CO2_VOC_SELECTED) {
+//        co2sel = ONLY_CO2_SELECTED;
+//        EEPROM.write(ADDR_CO2SEL, co2sel);
+//      } else {
+//        co2sel = NO_CO2_VOC;
+//        EEPROM.write(ADDR_CO2SEL, co2sel);
+//      }
+//   }
   } else {
     SerialPrint(F("Invalid Input!...Default state of both VOCs Disabled"), USB_UART_PORT, 1, 0, 0);
     pid1en = 0;
