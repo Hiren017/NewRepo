@@ -1,3 +1,3334 @@
-Added this new file in the cloned repo
-This change is being made on January 17,2024.
-This change is being done for the testbranch.
+/**
+   @file menu.ino
+   @brief Device Configuration menu functions
+   @author Tejas
+   @date 02/14/2023
+   @copyright Sensit Technologies (c) 2023
+*/
+
+/**
+  @brief  Get time from user and set device RTC
+*/
+void set_device_time() {
+  String time_input = "";
+  SerialPrint(F("Type Date Time: MM/DD/YY HH:MM:TT (24-Hour)"), USB_UART_PORT, 1, 1, 0);
+  SerialDelay(USB_UART_PORT, 300);
+  time_input = SerialRead(USB_UART_PORT, '\n', 1, 0);
+  if (time_input.length() == 17) {
+    set_date(time_input, 0, 0);  // Input,time source is user entered (other option is GSM[1], offset)
+  }
+  read_date(YEAR_IN_YY_FORMAT);
+  SerialPrint(F("Time Set: "), USB_UART_PORT, 0, 0, 0);
+  SerialPrint(date, USB_UART_PORT, 1, 1, 0);
+}
+
+/**
+  @brief  Function for set system settings.
+*/
+void system_settings() {
+  String system_response = "";
+  do {
+    SerialPrint(F("Type"), USB_UART_PORT, 0, 0, 0);
+    if (RAMP == deviceType) {
+      SerialPrint(F(" AUTORANGE, CALFILE, ECHEM, ECHEMPARAM, OFFSET, OFFSETPARAM, ACT_SAMPLING,"), USB_UART_PORT, 0, 0, 0);
+    }
+    SerialPrint(F(" SAMPLE, TRIGGER, CONSTRAIN, WIND, PID, or EXIT"), USB_UART_PORT, 1, 1, 0);  //remove sample/trigger for now
+    SerialDelay(USB_UART_PORT, 300);
+
+    system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+    SerialPrint(F("Command Received: "), USB_UART_PORT, 0, 0, 0);
+    SerialPrint(system_response, USB_UART_PORT, 1, 1, 0);
+
+    if (system_response.indexOf(F("WIND")) > -1) {
+      SerialPrint(F("Type ANALOG, DIGITAL, or NONE"), USB_UART_PORT, 1, 1, 0);
+      SerialDelay(USB_UART_PORT, 300);
+      system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+      system_response.toUpperCase();
+      if (system_response.indexOf(F("NONE")) > -1) {
+        SerialPrint(F("No Anemometer Selected"), USB_UART_PORT, 1, 1, 0);
+        meten = MET_DISABLED;
+      } else if (system_response.indexOf(F("ANALOG")) > -1) {
+        SerialPrint(F("ANALOG Selected, Connect to Analog(MET) Port"), USB_UART_PORT, 1, 1, 0);
+        meten = MET_ANALOG;
+      } else if (system_response.indexOf(F("DIGITAL")) > -1) {
+        SerialPrint(F("Digital Selected, Connect to Digital(MET) Port"), USB_UART_PORT, 1, 1, 0);
+        meten = MET_DIGITAL;
+      }
+      EEPROM.write(ADDR_METEN, meten);
+    } else if ((system_response.indexOf(F("ACT_SAMPLING")) > -1) && (RAMP == deviceType)) {
+      SetFanControl();
+    } else if ((system_response.indexOf(F("CALFILE")) > -1) && (RAMP == deviceType)) {
+      SerialPrint(F("CALFILE (Type ENABLE or DISABLE)"), USB_UART_PORT, 1, 1, 0);
+      SerialDelay(USB_UART_PORT, 300);
+      system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+      system_response.toUpperCase();
+      SerialPrint(F("Command Received: "), USB_UART_PORT, 0, 0, 0);
+      SerialPrint(system_response, USB_UART_PORT, 1, 1, 0);
+
+      if (system_response.indexOf(F("ENABLE")) > -1) {
+        calfile = 1;
+        EEPROM.write(ADDR_CALFILE, 1);
+        SerialPrint(F("CALFILE Enabled"), USB_UART_PORT, 1, 1, 0);
+      } else if (system_response.indexOf(F("DISABLE")) > -1) {
+        calfile = 0;
+        SerialPrint(F("CALFILE Disabled"), USB_UART_PORT, 1, 1, 0);
+        EEPROM.write(ADDR_CALFILE, 0);
+      }
+    }
+    if (RAMP == deviceType) {
+      if (system_response.indexOf(F("CONSTRAIN")) > -1) {
+
+        SerialPrint(F("Type ENABLE or DISABLE to set ECHEM constrain option"), USB_UART_PORT, 1, 1, 0);
+        SerialDelay(USB_UART_PORT, 300);
+
+        system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+        SerialPrint(F("Command Received: "), USB_UART_PORT, 0, 0, 0);
+        SerialPrint(system_response, USB_UART_PORT, 1, 1, 0);
+
+        if (system_response.indexOf(F("ENABLE")) > -1) {
+          constrain_op = 1;
+          SerialPrint(F("ECHEM Constrain Enabled"), USB_UART_PORT, 1, 1, 0);
+        } else if (system_response.indexOf(F("DISABLE")) > -1) {
+          constrain_op = 0;
+          SerialPrint(F("ECHEM Constrain Disabled"), USB_UART_PORT, 1, 1, 0);
+        } else {
+          SerialPrint(F("Command Not Recognized. Constrain was not modified."), USB_UART_PORT, 1, 0, 0);
+        }
+        EEPROM.update(ADDR_CONSTRAIN_OP, constrain_op);
+      }
+
+      else if (system_response.indexOf(F("AUTORANGE")) > -1) {
+
+        SerialPrint(F("Type ENABLE or DISABLE"), USB_UART_PORT, 1, 1, 0);
+        SerialDelay(USB_UART_PORT, 300);
+
+        system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+        SerialPrint(F("Command Received: "), USB_UART_PORT, 0, 0, 0);
+        SerialPrint(system_response, USB_UART_PORT, 1, 1, 0);
+
+        if (system_response.indexOf(F("ENABLE")) > -1) {
+          autorange = 1;
+          SerialPrint(F("Auto-Range Enabled"), USB_UART_PORT, 1, 1, 0);
+        } else if (system_response.indexOf(F("DISABLE")) > -1) {
+          autorange = 0;
+          SerialPrint(F("Auto-Range Disabled"), USB_UART_PORT, 1, 1, 0);
+        } else {
+          SerialPrint(F("Command not recognized. Auto-Range was not modified."), USB_UART_PORT, 1, 0, 0);
+        }
+        EEPROM.update(ADDR_RANGE, autorange);
+      } else if (system_response.indexOf(F("ECHEMPARAM")) > -1) {
+        for (uint8_t i = 0; i < echemnum; i++) {
+          SerialPrint(sensorlist(ecmap[i]) + ":", USB_UART_PORT, 1, 0, 0);
+          SerialPrint(F("Zero Current (nA): "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(act_b[i]), USB_UART_PORT, 1, 0, 0);
+          SerialPrint(F("Aux Zero Current (nA): "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(aux_b[i]), USB_UART_PORT, 1, 0, 0);
+          SerialPrint(F("Sensitivity (nA/ppm): "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(sen_m[i]), USB_UART_PORT, 1, 0, 0);
+          if (ecmap[i] == 3) {
+            SerialPrint(F("Secondary (NO2) Sensitivity (nA/ppm): "), USB_UART_PORT, 0, 0, 0);
+            SerialPrint(String(sen_m[i + 1]), USB_UART_PORT, 1, 0, 0);
+          }
+          SerialPrint("", USB_UART_PORT, 1, 0, 0);
+        }
+
+        system_response = F("");
+      } else if (system_response.indexOf(F("OFFSETPARAM")) > -1) {
+
+        for (uint8_t i = 0; i < echemnum; i++) {
+          SerialPrint(sensorlist(ecmap[i]) + ":", USB_UART_PORT, 1, 0, 0);
+          SerialPrint(F("Slope Correction: "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(slopecalc[i], 3), USB_UART_PORT, 1, 0, 0);
+          SerialPrint(F("Offset Correction: "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(offsetcalc[i], 1), USB_UART_PORT, 1, 0, 0);
+          SerialPrint("", USB_UART_PORT, 1, 0, 0);
+        }
+        for (uint8_t i = 4; i < 7; i++) {
+          SerialPrint(sensorlist(i + echemlist - 4) + ":", USB_UART_PORT, 1, 0, 0);
+          SerialPrint(F("Slope Correction: "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(slopecalc[i], 3), USB_UART_PORT, 1, 0, 0);
+          SerialPrint(F("Offset Correction: "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(offsetcalc[i], 1), USB_UART_PORT, 1, 0, 0);
+          SerialPrint("", USB_UART_PORT, 1, 0, 0);
+        }
+
+        SerialPrint(sensorlist(17) + ":", USB_UART_PORT, 1, 0, 0);
+        SerialPrint(F("Slope Correction: "), USB_UART_PORT, 0, 0, 0);
+        SerialPrint(String(slopecalc[7], 3), USB_UART_PORT, 1, 0, 0);
+        SerialPrint(F("Offset Correction: "), USB_UART_PORT, 0, 0, 0);
+        SerialPrint(String(offsetcalc[7], 1), USB_UART_PORT, 1, 0, 0);
+        SerialPrint("", USB_UART_PORT, 1, 0, 0);
+
+        for (uint8_t i = 8; i < 11; i++) {
+          SerialPrint(sensorlist(i + echemlist - 5) + ":", USB_UART_PORT, 1, 0, 0);
+          SerialPrint(F("Slope Correction: "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(slopecalc[i], 3), USB_UART_PORT, 1, 0, 0);
+          SerialPrint(F("Offset Correction: "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(offsetcalc[i], 1), USB_UART_PORT, 1, 0, 0);
+          SerialPrint("", USB_UART_PORT, 1, 0, 0);
+        }
+
+        SerialPrint("", USB_UART_PORT, 1, 0, 0);
+        system_response = F("");
+      } else if (system_response.indexOf(F("ECHEM")) > -1) {
+        SerialPrint(F("Adjust E-chem sensor parameters. Type sensor number (1-4)"), USB_UART_PORT, 1, 1, 0);
+        SerialPrint(F("0: Default, 1, 2, 3, 4"), USB_UART_PORT, 1, 1, 0);
+        SerialDelay(USB_UART_PORT, 300);
+
+        int16_t tempnum[5] = { 0 };
+        tempnum[0] = SerialRead(USB_UART_PORT, '\n', 1, 1).toInt();
+
+        if (tempnum[0] < 5) {
+          if (tempnum[0] == 0) {
+            SerialPrint(F("Reset to factory default? (Yes)"), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 300);
+            String tempstring = Serial.readStringUntil('\n');
+            tempstring.toUpperCase();
+            if (tempstring.indexOf(F("YES")) > -1) {
+              for (uint8_t i = 0; i < echemnum; i++) {
+                /*Reset the Aux zero current, Zero current, and Sensitivity to default values for respective configured sensors on each of the 4 slots*/
+                aux_b[i] = auxb_hash[ecmap[i]];
+                act_b[i] = actb_hash[ecmap[i]];
+                sen_m[i] = senm_hash[ecmap[i]];
+
+                EEPROM.write(addr_aux_blo[i], lowByte(aux_b[i]));
+                EEPROM.write(addr_aux_bhi[i], highByte(aux_b[i]));
+
+                EEPROM.write(addr_act_blo[i], lowByte(act_b[i]));
+                EEPROM.write(addr_act_bhi[i], highByte(act_b[i]));
+
+                EEPROM.write(addr_sen_mlo[i], lowByte(sen_m[i]));
+                EEPROM.write(addr_sen_mhi[i], highByte(sen_m[i]));
+
+                //Jacob 09222022 Correct the reference to O3 and NO2 for secondary sensitivity
+                if (i > 0) {                                   //Jacob 09222022 Limit check to i>0 as O3 cannot be installed in position 0 with current code
+                  if ((3 == ecmap[i]) && (2 == ecmap[i - 1]))  // Secondary (NO2) Sensitivity for O3 Sensor
+                  {
+                    /*Reset the Secondary (NO2) sensitivity for O3 sensor to default values if configured and available*/
+                    sen_m[4] = senm_hash[7];
+                    EEPROM.write(addr_sen_mlo[4], lowByte(sen_m[4]));
+                    EEPROM.write(addr_sen_mhi[4], highByte(sen_m[4]));
+                  }
+                }
+              }
+              SerialPrint(F("Default Parameters Set"), USB_UART_PORT, 1, 1, 0);
+            } else {
+              if (tempstring.indexOf(F("YES")) > -1) {
+                SerialPrint(F("Parameters NOT Set"), USB_UART_PORT, 1, 1, 0);
+              }
+            }
+          } else {
+            SerialPrint(F("Type Zero Current (nA)"), USB_UART_PORT, 0, 0, 0);
+            SerialPrint(String(sensorlist(ecmap[tempnum[0] - 1])), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 300);
+
+            //tempnum[1] takes user input for Zero current
+            tempnum[1] = (SerialRead(USB_UART_PORT, '\n', 1, 1)).toInt();
+
+            SerialPrint(F("Type Aux Zero Current (nA)"), USB_UART_PORT, 0, 0, 0);
+            SerialPrint(String(sensorlist(ecmap[tempnum[0] - 1])), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 300);
+
+            //tempnum[2] takes user input for Aux Zero current
+            tempnum[2] = (SerialRead(USB_UART_PORT, '\n', 1, 1)).toInt();
+
+            SerialPrint(F("Type Sensitivity (nA/ppm)"), USB_UART_PORT, 0, 0, 0);
+            SerialPrint(String(sensorlist(ecmap[tempnum[0] - 1])), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 300);
+
+            //tempnum[3] takes user input for Sensitivity
+            tempnum[3] = (SerialRead(USB_UART_PORT, '\n', 1, 1)).toInt();
+
+            //Jacob 09222022 Add check for correcting secondary NO2 sensitivity and limit to positions greater than 0 (e.g. slot 1)
+            if (tempnum[0] > 1) {
+              if ((3 == ecmap[tempnum[0] - 1]) && (2 == ecmap[tempnum[0] - 2])) {
+                SerialPrint(F("Type Secondary (NO2) Sensitivity (nA/ppm)"), USB_UART_PORT, 0, 0, 0);
+                SerialPrint(String(sensorlist(ecmap[tempnum[0] - 1])), USB_UART_PORT, 1, 1, 0);
+                SerialDelay(USB_UART_PORT, 300);
+
+                //tempnum[4] takes user input for Secondary (NO2) Sensitivity
+                tempnum[4] = (SerialRead(USB_UART_PORT, '\n', 1, 1)).toInt();
+              }
+            }
+            SerialPrint(F("Sensor Number: "), USB_UART_PORT, 0, 0, 0);
+            SerialPrint(String(tempnum[0]), USB_UART_PORT, 1, 0, 0);
+
+            SerialPrint(F("Zero Current: "), USB_UART_PORT, 0, 0, 0);
+            SerialPrint(String(tempnum[1]), USB_UART_PORT, 1, 0, 0);
+
+            SerialPrint(F("Aux Zero Current: "), USB_UART_PORT, 0, 0, 0);
+            SerialPrint(String(tempnum[2]), USB_UART_PORT, 1, 0, 0);
+
+            SerialPrint(F("Sensitivity: "), USB_UART_PORT, 0, 0, 0);
+            SerialPrint(String(tempnum[3]), USB_UART_PORT, 1, 0, 0);
+
+
+            //Jacob 09222022 same as above for checking O3 and NO2 for compensation.
+            if (tempnum[0] > 1) {
+              if ((3 == ecmap[tempnum[0] - 1]) && (2 == ecmap[tempnum[0] - 2]))  //if ecmap[3] ==3 i.e. O3 configured only then execute this if condition
+              {
+                SerialPrint(F("Secondary (NO2) Sensitivity: "), USB_UART_PORT, 0, 0, 0);
+                SerialPrint(String(tempnum[4]), USB_UART_PORT, 1, 1, 0);
+              }
+            }
+            SerialPrint(F("Type 'YES' to confirm...."), USB_UART_PORT, 0, 0, 0);
+            SerialDelay(USB_UART_PORT, 300);
+
+            system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+            if (system_response.indexOf(F("YES")) > -1) {
+              SerialPrint(F("Parameters Saved"), USB_UART_PORT, 1, 1, 0);
+              EEPROM.write(addr_act_blo[tempnum[0] - 1], lowByte(tempnum[1]));
+              EEPROM.write(addr_act_bhi[tempnum[0] - 1], highByte(tempnum[1]));
+              EEPROM.write(addr_aux_blo[tempnum[0] - 1], lowByte(tempnum[2]));
+              EEPROM.write(addr_aux_bhi[tempnum[0] - 1], highByte(tempnum[2]));
+              EEPROM.write(addr_sen_mlo[tempnum[0] - 1], lowByte(tempnum[3]));
+              EEPROM.write(addr_sen_mhi[tempnum[0] - 1], highByte(tempnum[3]));
+
+              int16_t lo = EEPROM.read(addr_aux_blo[tempnum[0] - 1]);
+              int16_t hi = EEPROM.read(addr_aux_bhi[tempnum[0] - 1]);
+              aux_b[tempnum[0] - 1] = word(hi, lo);
+
+              lo = EEPROM.read(addr_act_blo[tempnum[0] - 1]);
+              hi = EEPROM.read(addr_act_bhi[tempnum[0] - 1]);
+              act_b[tempnum[0] - 1] = word(hi, lo);
+
+              lo = EEPROM.read(addr_sen_mlo[tempnum[0] - 1]);
+              hi = EEPROM.read(addr_sen_mhi[tempnum[0] - 1]);
+              sen_m[tempnum[0] - 1] = word(hi, lo);
+
+              //Jacob 09222022 same as above for checking O3 and NO2 for compensation.
+              if (tempnum[0] > 1) {
+                if ((3 == ecmap[tempnum[0] - 1]) && (2 == ecmap[tempnum[0] - 2])) {
+                  EEPROM.write(addr_sen_mlo[tempnum[0]], lowByte(tempnum[4]));
+                  EEPROM.write(addr_sen_mhi[tempnum[0]], highByte(tempnum[4]));
+                  uint8_t lo = EEPROM.read(addr_sen_mlo[tempnum[0]]);
+                  uint8_t hi = EEPROM.read(addr_sen_mhi[tempnum[0]]);
+                  sen_m[tempnum[0]] = word(hi, lo);
+                }
+              }
+            } else {
+              SerialPrint(F("Parameters Discarded"), USB_UART_PORT, 1, 1, 0);
+            }
+          }
+        } else {
+          SerialPrint(F("Invalid Selection"), USB_UART_PORT, 1, 1, 0);
+        }
+      }
+
+      else if (system_response.indexOf(F("OFFSET")) > -1) {
+        SerialPrint(F("Adjust Sensor Slope and Offset or type EXIT"), USB_UART_PORT, 1, 1, 0);
+        do {
+          SerialPrint(F("Type Sensor Name as "), USB_UART_PORT, 0, 0, 0);
+          for (uint8_t i = 0; i < echemnum; i++) {
+            SerialPrint("'" + sensorlist(ecmap[i]) + ":' ", USB_UART_PORT, 0, 0, 0);
+          }
+          for (uint8_t i = 4; i < 7; i++) {
+            SerialPrint("'" + sensorlist(i + echemlist - 4) + ":' ", USB_UART_PORT, 0, 0, 0);
+          }
+          SerialPrint("'" + sensorlist(17) + ":' ", USB_UART_PORT, 0, 0, 0);
+          for (uint8_t i = 8; i < 11; i++) {
+            SerialPrint("'" + sensorlist(i + echemlist - 5) + ":' ", USB_UART_PORT, 0, 0, 0);
+          }
+          SerialPrint(" ,'RESET', or 'EXIT'", USB_UART_PORT, 1, 1, 0);
+          SerialDelay(USB_UART_PORT, 300);
+          system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+          uint8_t sensornum;
+          float tempnum[2];
+          String temp;
+          uint8_t counter = 0;
+          uint8_t flag = 0;
+          if (system_response.indexOf(":") > -1) {
+            for (uint8_t i = 0; i < 11; i++) {
+              uint8_t indexvalue = 0;
+              if (i < 4) {
+                indexvalue = ecmap[i];
+              } else if ((i > 3) && (i < 7)) {
+                // indexvalue = i + 2;
+                indexvalue = i + echemlist - 4;
+              } else if ((i > 7) && (i < 11)) {
+                // indexvalue = i + 1;
+                indexvalue = i + echemlist - 5;
+              } else if (7 == i) {
+                // indexvalue = 17;
+                indexvalue = echemlist + 11;
+              }
+
+              if (system_response.indexOf(sensorlist(indexvalue) + ":") > -1) {
+                sensornum = i;
+                SerialPrint(sensorlist(indexvalue) + " Selected", USB_UART_PORT, 1, 1, 0);
+                SerialPrint(F("Type Offset Value (Max +/- 3000, Default: 0)"), USB_UART_PORT, 1, 0, 0);
+                SerialPrint("Current: " + String(offsetcalc[sensornum], 1), USB_UART_PORT, 1, 0, 0);
+                SerialPrint(F("Type 'SKIP' to Leave Unchanged"), USB_UART_PORT, 1, 1, 0);
+                SerialDelay(USB_UART_PORT, 300);
+                temp = SerialRead(USB_UART_PORT, '\n', 1, 1);
+                if (temp.indexOf(F("SKIP")) == -1) {
+                  tempnum[0] = temp.toFloat();
+                  counter += 1;
+                } else {
+                  tempnum[0] = offsetcalc[sensornum];
+                }
+                SerialPrint(F("Type Slope Correction (Max 50.0, Default: 1)"), USB_UART_PORT, 1, 0, 0);
+                SerialPrint("Current: " + String(slopecalc[sensornum], 3), USB_UART_PORT, 1, 0, 0);
+                SerialPrint(F("Type 'SKIP' to Leave Unchanged"), USB_UART_PORT, 1, 1, 0);
+                SerialDelay(USB_UART_PORT, 300);
+                temp = SerialRead(USB_UART_PORT, '\n', 1, 1);
+                if (temp.indexOf(F("SKIP")) == -1) {
+                  tempnum[1] = temp.toFloat();
+                  counter += 2;
+                } else {
+                  tempnum[1] = slopecalc[sensornum];
+                }
+                flag = 1;
+                break;
+              }
+            }
+            if (1 == flag) {
+              if ((tempnum[0] <= OFFSET_MAX_LIMIT) && (tempnum[0] >= OFFSET_MIN_LIMIT) && (tempnum[1] >= SLOPE_MIN_LIMIT) && (tempnum[1] <= SLOPE_MAX_LIMIT)) {
+                SerialPrint(F("Offset: "), USB_UART_PORT, 0, 0, 0);
+                SerialPrint(String(tempnum[0], 1), USB_UART_PORT, 1, 0, 0);
+                SerialPrint(F("Slope: "), USB_UART_PORT, 0, 0, 0);
+                SerialPrint(String(tempnum[1], 3), USB_UART_PORT, 1, 0, 0);
+                SerialPrint(F("Type 'YES' to confirm...."), USB_UART_PORT, 0, 0, 0);
+
+                SerialDelay(USB_UART_PORT, 300);
+
+                system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+                if (system_response.indexOf(F("YES")) > -1) {
+                  SerialPrint(F("Parameters Saved"), USB_UART_PORT, 1, 1, 0);
+                  if (sensornum <= 7) {
+                    if ((1 == counter) || (3 == counter)) {
+                      EEPROM.write(addr_offsetlo[sensornum], lowByte(int(tempnum[0] * 10.00)));
+                      EEPROM.write(addr_offsethi[sensornum], highByte(int(tempnum[0] * 10.00)));
+                    }
+                    if ((2 == counter) || (3 == counter)) {
+                      EEPROM.write(addr_slopelo[sensornum], lowByte((unsigned int)(round(tempnum[1] * 1000.000))));
+                      EEPROM.write(addr_slopehi[sensornum], highByte((unsigned int)(round(tempnum[1] * 1000.000))));
+                    }
+                    uint8_t lo = EEPROM.read(addr_offsetlo[sensornum]);
+                    uint8_t hi = EEPROM.read(addr_offsethi[sensornum]);
+                    int16_t val = word(hi, lo);
+                    offsetcalc[sensornum] = float(val) / 10.00;
+                    lo = EEPROM.read(addr_slopelo[sensornum]);
+                    hi = EEPROM.read(addr_slopehi[sensornum]);
+                    uint16_t u16slopeval = word(hi, lo);
+                    slopecalc[sensornum] = float(u16slopeval) / 1000.000;
+                  } else if (sensornum > 7) {
+                    if ((1 == counter) || (3 == counter)) {
+                      EEPROM.put(ADDR_OFFSETPM1_2 + ((sensornum - 8) * 2), (int16_t)int16_t(tempnum[0] * 10.00));
+                    }
+                    if ((2 == counter) || (3 == counter)) {
+                      EEPROM.put(ADDR_SLOPEPM1_2 + ((sensornum - 8) * 2), (uint16_t)(round((tempnum[1] * 1000.000))));
+                    }
+                    int16_t val;
+                    EEPROM.get(ADDR_OFFSETPM1_2 + ((sensornum - 8) * 2), val);
+                    offsetcalc[sensornum] = float(val) / 10.00;
+                    uint16_t val2;
+                    EEPROM.get(ADDR_SLOPEPM1_2 + ((sensornum - 8) * 2), val2);
+                    slopecalc[sensornum] = float(val2) / 1000.000;
+                  }
+                } else {
+                  SerialPrint(F("Parameters Discarded"), USB_UART_PORT, 1, 1, 0);
+                }
+              } else {
+                SerialPrint(F("Values out of bounds"), USB_UART_PORT, 1, 1, 0);
+              }
+            }
+          } else if (system_response.indexOf(F("RESET")) > -1) {
+            SerialPrint(F("All parameters set to default"), USB_UART_PORT, 1, 1, 0);
+            for (uint8_t i = 0; i < 8; i++) {
+              EEPROM.update(addr_offsetlo[i], 0);
+              EEPROM.update(addr_offsethi[i], 0);
+              EEPROM.update(addr_slopelo[i], lowByte(1000));
+              EEPROM.update(addr_slopehi[i], highByte(1000));
+              offsetcalc[i] = 0.00;
+              slopecalc[i] = 1.00;
+            }
+
+            for (uint8_t i = 8; i < 11; i++) {
+              EEPROM.put(ADDR_OFFSETPM1_2 + ((i - 8) * 2), (int16_t)0);
+              offsetcalc[i] = 0.00;
+              EEPROM.put(ADDR_SLOPEPM1_2 + ((i - 8) * 2), (uint16_t)1000);
+              slopecalc[i] = 1.00;
+            }
+          }
+        } while (system_response.indexOf(F("EXIT")) == -1);
+        system_response = "";
+      }
+    }
+
+        if (system_response.indexOf(F("TRIGGER")) > -1) {
+          do {
+            SerialPrint(F("Type TRIGCONFIG, TRIGTYPE, or EXIT"), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 300);
+            system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+            if (system_response.indexOf(F("TRIGCONFIG")) > -1) {
+              SerialPrint(F("Type DYNAMIC or STATIC for Threshold"), USB_UART_PORT, 1, 1, 0);
+              SerialDelay(USB_UART_PORT, 300);
+              system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+              uint8_t tinput = 0;
+              if (system_response.indexOf("DYNAMIC") > -1) {
+                tinput = 1;
+                threshtype = 2;
+                SerialPrint(F("Dynamic Threshold Selected"), USB_UART_PORT, 1, 1, 0);
+                SerialPrint(F("Type Baseline Filter Time (10-3600 seconds)"), USB_UART_PORT, 0, 0, 0);
+                SerialDelay(USB_UART_PORT, 300);
+                uint16_t temp = SerialRead(USB_UART_PORT, '\n', 1, 1).toInt();
+                if ((temp > 9) && (temp <= 3600)) {
+                  basetime = temp;
+                  EEPROM.write(ADDR_BASETIME_H, highByte(basetime));
+                  EEPROM.write(ADDR_BASETIME_L, lowByte(basetime));
+                  SerialPrint(F("...Set: "), USB_UART_PORT, 0, 0, 0);
+                  SerialPrint(String(basetime), USB_UART_PORT, 1, 1, 0);
+                } else {
+                  SerialPrint(F("...Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+                }
+                SerialPrint(F("Type Static Limit (1-50000 ppb)"), USB_UART_PORT, 0, 0, 0);
+                SerialDelay(USB_UART_PORT, 300);
+                temp = SerialRead(USB_UART_PORT, '\n', 1, 1).toInt();
+                if ((temp != 0) && (temp <= 50000)) {
+                  triggerstatic = temp;
+                  EEPROM.write(ADDR_TRIGGERSTATIC_H, highByte(triggerstatic));
+                  EEPROM.write(ADDR_TRIGGERSTATIC_L, lowByte(triggerstatic));
+                  SerialPrint(F("...Set: "), USB_UART_PORT, 0, 0, 0);
+                  SerialPrint(String(triggerstatic), USB_UART_PORT, 1, 1, 0);
+                } else {
+                  SerialPrint(F("...Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+                }
+              } else if (system_response.indexOf("STATIC") > -1) {
+                tinput = 1;
+                threshtype = 1;
+                SerialPrint(F("Static Threshold Selected"), USB_UART_PORT, 1, 1, 0);
+              } else {
+                tinput = 0;
+              }
+              if (tinput == 1) {
+                EEPROM.write(ADDR_TRIGGER_THRS_TYPE, threshtype);
+                uint8_t steps = 1;
+                String string[3] = { F("LOW"), F("MED"), F("HIGH") };
+                if (trigtype == 1) {
+                  steps = 3;
+                }
+                for (uint8_t i = 0; i < steps; i++) {
+                  uint8_t selector = 0;
+                  if (1 == trigtype) {
+                    SerialPrint(F("Programming Trigger Wind Range: "), USB_UART_PORT, 0, 0, 0);
+                    SerialPrint(string[i], USB_UART_PORT, 1, 1, 0);
+                    selector = i + 1;
+                  }
+                  if ((2 == trigtype) || (3 == trigtype)) {
+                    selector = 4;
+                  }
+                  if (0 == trigtype) {
+                    EEPROM.write(ADDR_DEGSTARTL[0], lowByte(0));
+                    EEPROM.write(ADDR_DEGSTARTH[0], highByte(0));
+                    EEPROM.write(ADDR_DEGENDL[0], lowByte(360));
+                    EEPROM.write(ADDR_DEGENDH[0], highByte(360));
+                    EEPROM.write(ADDR_WIND[0], 0);
+                  }
+                  if ((0 == trigtype) || (1 == trigtype)) {
+                    SerialPrint(F("Type Trigger Threshold (1-50000 ppb)"), USB_UART_PORT, 0, 0, 0);
+                    SerialDelay(USB_UART_PORT, 300);
+                    uint16_t temp = SerialRead(USB_UART_PORT, '\n', 1, 1).toInt();
+                    if ((temp != 0) && (temp <= 50000)) {
+                      triggerval[selector] = temp;
+                      EEPROM.write(ADDR_TRIGVAL_L[selector], lowByte(triggerval[selector]));
+                      EEPROM.write(ADDR_TRIGVAL_H[selector], highByte(triggerval[selector]));
+                      SerialPrint(F("...Set: "), USB_UART_PORT, 0, 0, 0);
+                      SerialPrint(String(triggerval[selector]), USB_UART_PORT, 1, 1, 0);
+                    } else {
+                      SerialPrint(F("...Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+                    }
+                    SerialPrint(F("Type Trigger Time (1-50000 sec)"), USB_UART_PORT, 0, 0, 0);
+                    SerialDelay(USB_UART_PORT, 300);
+                    temp = SerialRead(USB_UART_PORT, '\n', 1, 1).toInt();
+                    if ((temp != 0) && (temp <= 50000)) {
+                      triggertime[selector] = temp;
+                      EEPROM.write(ADDR_TRIGTIME_L[selector], lowByte(triggertime[selector]));
+                      EEPROM.write(ADDR_TRIGTIME_H[selector], highByte(triggertime[selector]));
+                      SerialPrint(F("....Set: "), USB_UART_PORT, 0, 0, 0);
+                      SerialPrint(String(triggertime[selector]), USB_UART_PORT, 1, 1, 0);
+                    } else {
+                      SerialPrint(F("...Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+                    }
+                  }
+                  if (trigtype > 0) {
+                    if ((1 == trigtype) || (2 == trigtype)) {
+                      SerialPrint(F("Type Degrees Start (0-360)"), USB_UART_PORT, 0, 0, 0);
+                      SerialDelay(USB_UART_PORT, 300);
+                      int16_t temp = SerialRead(USB_UART_PORT, '\n', 1, 1).toInt();
+                      if ((temp >= 0) && (temp <= 360)) {
+                        degstart[selector] = temp;
+                        EEPROM.write(ADDR_DEGSTARTL[selector], lowByte(degstart[selector]));
+                        EEPROM.write(ADDR_DEGSTARTH[selector], highByte(degstart[selector]));
+                        SerialPrint(F("....Set: "), USB_UART_PORT, 0, 0, 0);
+                        SerialPrint(String(degstart[selector]), USB_UART_PORT, 1, 1, 0);
+                      } else {
+                        SerialPrint(F("...Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+                      }
+                      SerialPrint(F("Type Degrees End (0-360)"), USB_UART_PORT, 0, 0, 0);
+                      SerialDelay(USB_UART_PORT, 300);
+                      temp = SerialRead(USB_UART_PORT, '\n', 1, 1).toInt();
+                      if ((temp >= 0) && (temp <= 360)) {
+                        degend[selector] = temp;
+                        EEPROM.write(ADDR_DEGENDL[selector], lowByte(degend[selector]));
+                        EEPROM.write(ADDR_DEGENDH[selector], highByte(degend[selector]));
+                        SerialPrint(F("....Set: "), USB_UART_PORT, 0, 0, 0);
+                        SerialPrint(String(degend[selector]), USB_UART_PORT, 1, 1, 0);
+                      } else {
+                        SerialPrint(F("...Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+                      }
+                    }
+                    SerialPrint(F("Type Wind Speed (1-100)"), USB_UART_PORT, 0, 0, 0);
+                    SerialDelay(USB_UART_PORT, 300);
+                    uint16_t temp = SerialRead(USB_UART_PORT, '\n', 1, 1).toInt();
+                    if ((temp > 0) && (temp <= 100)) {
+                      windspd[selector] = temp;
+                      EEPROM.write(ADDR_WIND[selector], windspd[selector]);
+                      SerialPrint(F("....Set: "), USB_UART_PORT, 0, 0, 0);
+                      SerialPrint(String(windspd[selector]), USB_UART_PORT, 1, 1, 0);
+                    }
+                  }
+                }
+              }
+            } else if (system_response.indexOf(F("TRIGTYPE")) > -1) {
+              SerialPrint(F("Type COMBO, QUADRANT, THRESHOLD, or WIND"), USB_UART_PORT, 1, 1, 0);
+              SerialDelay(USB_UART_PORT, 300);
+              system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+              if (system_response.indexOf(F("THRESHOLD")) > -1) {
+                SerialPrint(F("Threshold Trigger Enabled"), USB_UART_PORT, 1, 1, 0);
+                trigtype = 0;
+                EEPROM.write(ADDR_TRIGGER_THRS_TYPE, trigtype);
+              } else if (system_response.indexOf(F("COMBO")) > -1) {
+                SerialPrint(F("Combination Trigger Enabled"), USB_UART_PORT, 1, 1, 0);
+                trigtype = 1;
+                EEPROM.write(ADDR_TRIGGER_THRS_TYPE, trigtype);
+              } else if (system_response.indexOf(F("WIND")) > -1) {
+                SerialPrint(F("Wind Trigger Enabled"), USB_UART_PORT, 1, 1, 0);
+                trigtype = 2;
+                EEPROM.write(ADDR_TRIGGER_THRS_TYPE, trigtype);
+              } else if (system_response.indexOf(F("QUADRANT")) > -1) {
+                SerialPrint(F("Wind Quadrant Trigger Enabled"), USB_UART_PORT, 1, 1, 0);
+                trigtype = 3;
+                EEPROM.write(ADDR_TRIGGER_THRS_TYPE, trigtype);
+                for (uint8_t i = 0; i < 4; i++) {
+                  bitSet(canister, i);
+                  bitSet(sampevent[i], i);
+                  bitSet(sampevent[i], 7);
+                  EEPROM.write(ADDR_EVENT[i], sampevent[i]);
+                }
+                EEPROM.write(ADDR_CANISTER, canister);
+              } else {
+                SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+              }
+            }
+          } while (system_response.indexOf("EXIT") == -1);
+    
+          system_response = "";
+        }
+        if (system_response.indexOf(F("SAMPLE")) > -1) {
+          do {
+            SerialPrint(F("Type SAMPCONFIG, SAMPDELAY, SAMPRESET, SAMPTEST, SAMPTIME, SAMPTYPE, or EXIT"), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 300);
+            system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+    
+            if (system_response.indexOf(F("SAMPDELAY")) > -1) {
+              SerialPrint(F("Type Delay in Seconds to Enable Sampling (1-100000)"), USB_UART_PORT, 1, 1, 0);
+              SerialDelay(USB_UART_PORT, 300);
+              unsigned long tempdelay = SerialRead(USB_UART_PORT, '\n', 1, 1).toInt();
+              if (tempdelay < 100001) {
+                startdelay[0] = tempdelay;
+                EEPROM.put(ADDR_CANISTER_DELAY, startdelay[0]);
+                SerialPrint(F("Sample Delay Confirmed: "), USB_UART_PORT, 0, 0, 0);
+                SerialPrint(String(startdelay[0]), USB_UART_PORT, 1, 1, 0);
+              }
+            } else if (system_response.indexOf(F("SAMPRESET")) > -1) {
+              activeflag = 0;
+              EEPROM.write(ADDR_CANISTER_ACTSAMPLE, activeflag);
+    
+              if (tubestat < 2) {
+                SerialPrint(F("Type All Canister Location Port#'s to Reset"), USB_UART_PORT, 1, 1, 0);
+                SerialDelay(USB_UART_PORT, 300);
+                system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+    
+                for (uint8_t i = 0; i < 4; i++) {
+                  if (system_response.indexOf(String(i + 1)) > -1) {
+                    bitClear(canister, i + 4);
+                    timecollect[i] = 0;
+                    SerialPrint(F("Port "), USB_UART_PORT, 0, 0, 0);
+                    SerialPrint(String(i + 1), USB_UART_PORT, 0, 0, 0);
+                    SerialPrint(F(" Reset"), USB_UART_PORT, 1, 0, 0);
+                    EEPROM.put(ADDR_CTIME[i], timecollect[i]);
+                    for (uint8_t j = 0; j < 4; j++) {
+                      if (bitRead(sampevent[j], i) == 1 && bitRead(canister, i + 4) == 0) {
+                        bitClear(eventflag, j);
+                        bitClear(eventflag, j + 4);
+                        EEPROM.write(ADDR_CANISTER_EVENT, eventflag);
+                      }
+                    }
+                  }
+                }
+              } else if (2 == tubestat) {
+                canister = 1;
+                timecollect[0] = 0;
+                bitClear(eventflag, 0);
+                bitClear(eventflag, 4);
+                EEPROM.put(ADDR_CTIME[0], timecollect[0]);
+                EEPROM.write(ADDR_CANISTER_EVENT, eventflag);
+                SerialPrint(F("Reset Complete"), USB_UART_PORT, 1, 1, 0);
+              }
+    
+              EEPROM.write(ADDR_CANISTER, canister);
+              samplecommand(0, 2, 1, "");
+              system_response = "";
+            }
+    
+            else if (system_response.indexOf(F("SAMPTYPE")) > -1) {
+              SerialPrint(F("Type DIRECT, NONE, PRESSURE, or TIME "), USB_UART_PORT, 1, 1, 0);
+              SerialDelay(USB_UART_PORT, 300);
+              system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+    
+              if (system_response.indexOf(F("NONE")) > -1) {
+                SerialPrint(F("Sampling Disabled"), USB_UART_PORT, 1, 1, 0);
+                samptype = 0;
+                EEPROM.write(ADDR_SAMPLE_TYPE, samptype);
+                canister = 0;
+                eventflag = 0;
+                mout = 0;
+                EEPROM.write(ADDR_MOUT, mout);
+                EEPROM.write(ADDR_CANISTER, canister);
+                EEPROM.write(ADDR_CANISTER_EVENT, eventflag);
+                for (uint8_t i = 0; i < 4; i++) {
+                  sampevent[i] = 0;
+                  pressuresamp[i] = 0;
+                  EEPROM.write(ADDR_EVENT[i], sampevent[i]);
+                  EEPROM.write(ADDR_PRESSURE[i], pressuresamp[i]);
+                }
+              } else if (system_response.indexOf(F("DIRECT")) > -1) {
+                SerialPrint(F("Direct Sampling Enabled"), USB_UART_PORT, 1, 1, 0);
+                samptype = 1;
+                canister = 1;  //only enable "port 1"
+                EEPROM.write(ADDR_CANISTER, canister);
+                tubestat = 3;
+                for (uint8_t i = 1; i < 4; i++) {
+                  sampevent[i] = 0;
+                  EEPROM.write(ADDR_EVENT[i], sampevent[i]);
+                }
+                sampevent[0] = 129;  //enable 1 event, canister 1  10000001
+                EEPROM.write(ADDR_EVENT[0], sampevent[0]);
+                EEPROM.write(ADDR_SAMPLE_TYPE, samptype);
+              } else if (system_response.indexOf(F("TIME")) > -1) {
+                SerialPrint(F("Time Sampling Enabled"), USB_UART_PORT, 1, 1, 0);
+                samptype = 2;
+                mout = 0;
+                EEPROM.write(ADDR_MOUT, mout);
+                EEPROM.write(ADDR_SAMPLE_TYPE, samptype);
+              } else if (system_response.indexOf(F("PRESSURE")) > -1) {
+                SerialPrint(F("Pressure Sampling Enabled"), USB_UART_PORT, 0, 0, 0);
+                samptype = 3;
+                mout = 0;
+                EEPROM.write(ADDR_MOUT, mout);
+                EEPROM.write(ADDR_SAMPLE_TYPE, samptype);
+                SerialPrint(F(", Enable Continous Monitoring? (YES/NO) "), USB_UART_PORT, 1, 1, 0);
+                SerialDelay(USB_UART_PORT, 300);
+                system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+    
+                if (system_response.indexOf(F("YES")) > -1) {
+                  SerialPrint(F("Continous Monitoring Enabled"), USB_UART_PORT, 1, 1, 0);
+                  bitSet(mout, 7);
+                } else {
+                  SerialPrint(F("Continous Monitoring Disabled"), USB_UART_PORT, 1, 1, 0);
+                }
+                EEPROM.write(ADDR_MOUT, mout);
+              }
+              if ((2 == samptype) || (3 == samptype)) {
+                SerialPrint(F("Run 'SAMPCONFIG' and 'SAMPTIME' to Finish Setup"), USB_UART_PORT, 1, 1, 0);
+              }
+            } else if (system_response.indexOf(F("SAMPTIME")) > -1) {
+    
+              if (canister > 0) {
+                // Compiler [WARNING] Unused cycles parameter
+                // uint8_t cycles = 1;
+                // if (tubestat < 2) {
+                //   cycles = 4;
+                // }
+    
+                for (uint8_t i = 0; i < 4; i++) {
+                  if (1 == bitRead(canister, i)) {
+                    SerialPrint(F("Type Sample Time Value (1 - 100000 seconds) for Port "), USB_UART_PORT, 0, 0, 0);
+                    SerialPrint(String(i + 1), USB_UART_PORT, 1, 1, 0);
+                    SerialDelay(USB_UART_PORT, 300);
+                    uint32_t temptime = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+                    if (temptime >= 1 && temptime <= 100000) {
+                      sampletime[i] = temptime;
+                      EEPROM.put(ADDR_STIME[i], sampletime[i]);
+                      SerialPrint(F("Sample Time Set : "), USB_UART_PORT, 0, 0, 0);
+                      SerialPrint(String(sampletime[i]), USB_UART_PORT, 1, 1, 0);
+                    } else {
+                      SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+                    }
+                  }
+                }
+              } else {
+                SerialPrint(F("No Sample Ports Enabled...Run 'SAMPCONFIG'"), USB_UART_PORT, 1, 1, 0);
+              }
+            } else if (system_response.indexOf(F("SAMPTEST")) > -1) {
+              String cvcresponse = "";
+              if (1 == samptype) {
+                digitalWrite(SAMPLER_PORT_TX, HIGH);
+                SerialPrint(F("Sample Acquire On, Hit Enter to Stop"), USB_UART_PORT, 1, 1, 0);
+                SerialClear(USB_UART_PORT, 1);
+                uint8_t testsample = 1;
+                do {
+                  if (digitalRead(SAMPLER_PORT_RX) == LOW) {
+                    SerialPrint(F("Flow Blocked"), USB_UART_PORT, 1, 0, 0);
+                    delay(1000);
+                  }
+                  cvcresponse = SerialRead(USB_UART_PORT, '\n', 0, 0);
+                  if (cvcresponse.length() > 0) {
+                    testsample = 0;
+                  }
+                } while (testsample == 1);
+              }
+              if (samptype > 1) {
+                SerialPower(SAMPLER_PORT, HIGH, fixbaud[SAMPLER_PORT]);
+                SerialClear(SAMPLER_PORT, 1);
+                delay(1000);
+    
+                samplecommand(0, 0, 1, "FWV");
+                //Jacob -- 19112021 provide feedback if no sampler is found
+                if (9 == tubestat) {
+                  SerialPrint(F("External Module Not Found... Type EXIT"), USB_UART_PORT, 1, 1, 0);
+                }
+                if (0 == tubestat) {
+                  SerialPrint(F("'P#:1' to Open Valve 'P#:0' to Close Valve 'TEST#:1' for Pressure On 'TEST#:0' for Pressure Off (#=1,2,3,4) or EXIT"), USB_UART_PORT, 1, 1, 0);
+                } else if (1 == tubestat) {
+                  SerialPrint(F("'P#:1' to Enable Pump 'P#:0' to Disable Pump 'TEST#:1' for Flow On 'TEST#:0' for Flow Off (#=1,2,3,4) or EXIT"), USB_UART_PORT, 1, 1, 0);
+                  //                  RS232_error = 1;
+                  //                  SerialPrint(F("Waiting For Weather Data"), USB_UART_PORT, 0, 0);
+                  //                  pinMode(RS232_shdn, OUTPUT);
+                  //                  digitalWrite(RS232_shdn, HIGH);
+                  //                  pinMode(RS232_en, OUTPUT);
+                  //                  digitalWrite(RS232_en, LOW);
+                  //                  pinMode(MET_en, OUTPUT);
+                  //                  digitalWrite(MET_en, HIGH);
+                  //
+                  //                  SerialClear(met, 1);
+                  //                  valid_millis = millis();
+                  //                  unsigned long tempmillis = millis();
+                  //                  do {
+                  //                    wind();
+                  //                    delay(1000);
+                  //                    SerialPrint(".", USB_UART_PORT, 0, 0);
+                  //                    if (millis() - tempmillis > 60000) {
+                  //                      SerialPrint(F("Error Reading Station!!"), USB_UART_PORT, 1, 1);
+                  //                      break;
+                  //                    }
+                  //                  } while (RS232_error == 1);
+                  //                  if (RS232_error == 0) {
+                  //                    SerialPrint(F("Success!!"), USB_UART_PORT, 1, 1);
+                  //                  }
+                } else if (2 == tubestat) {
+                  SerialPrint(F("'P1:1' to Open Valve 'P1:0' to Close Valve 'TEST1:1' for Pressure On 'TEST1:0' for Pressure Off or EXIT"), USB_UART_PORT, 1, 1, 0);
+                  //samplecommand(0 ,0, 1, F("MODOUT"));
+                }
+                do {
+                  //                  if (tubestat == 1) {
+                  //                    wind();
+                  //                  }
+    
+                  cvcresponse = SerialRead(USB_UART_PORT, '\n', 1, 1);
+    
+                  if (cvcresponse.length() > 0) {
+                    samplecommand(0, 2, 1, cvcresponse);
+                  }
+                  String samplermsg = SerialRead(SAMPLER_PORT, '\n', 1, 0);
+                  if (samplermsg.length() > 0) {
+                    Serial.println(samplermsg);
+                  }
+                  //checkAUX(1);
+                } while (cvcresponse.indexOf(F("EXIT")) == -1);
+                SerialPrint("", USB_UART_PORT, 1, 0, 0);
+              }
+    
+              SerialClear(USB_UART_PORT, 1);
+              system_response = "";
+            } else if (system_response.indexOf(F("SAMPCONFIG")) > -1) {
+              EEPROM_read();
+              if (trigtype < 3) {
+                canister = 0;
+                eventflag = 0;
+                uint8_t cannum = 0;
+    
+                if (tubestat < 2) {
+                  SerialPrint(F("Sampler Reset, Type All Sample Location Port#'s"), USB_UART_PORT, 1, 1, 0);
+                  SerialDelay(USB_UART_PORT, 300);
+                  system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+    
+                  for (uint8_t i = 0; i < 4; i++) {
+                    timecollect[i] = 0;
+                    EEPROM.put(ADDR_CTIME[i], timecollect[i]);
+    
+                    if (system_response.indexOf(String(i + 1)) > -1) {
+                      bitSet(canister, i);
+                      cannum++;
+                      SerialPrint(F("Sample Port "), USB_UART_PORT, 0, 0, 0);
+                      SerialPrint(String(i + 1), USB_UART_PORT, 0, 0, 0);
+                      SerialPrint(F(" Selected"), USB_UART_PORT, 1, 0, 0);
+                    }
+                  }
+    
+                  EEPROM.write(ADDR_CANISTER, canister);
+                  EEPROM.write(ADDR_CANISTER_EVENT, eventflag);
+                  samplecommand(0, 2, 1, "");
+                  SerialPrint("", USB_UART_PORT, 1, 0, 0);
+    
+                  if (cannum > 0) {
+                    uint8_t canset = cannum;
+                    if (canset > 1) {
+                      SerialPrint(F("Maximum Sample Events: "), USB_UART_PORT, 0, 0, 0);
+                      SerialPrint(String(canset), USB_UART_PORT, 1, 1, 0);
+                    }
+                    for (uint8_t i = 0; i < 4; i++) {
+                      sampevent[i] = 0;
+                      if (canset > 0) {
+                        SerialPrint(F("Type All Port# for Event "), USB_UART_PORT, 0, 0, 0);
+                        SerialPrint(String(i + 1), USB_UART_PORT, 1, 1, 0);
+                        SerialDelay(USB_UART_PORT, 300);
+                        system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+    
+                        SerialPrint(F("Sampling Event "), USB_UART_PORT, 0, 0, 0);
+                        SerialPrint(String(i + 1), USB_UART_PORT, 0, 0, 0);
+                        SerialPrint(":", USB_UART_PORT, 0, 0, 0);
+                        for (uint8_t j = 0; j < 4; j++) {
+                          if (system_response.indexOf(String(j + 1)) > -1) {
+                            if (bitRead(canister, j) == 1) {
+                              bitSet(sampevent[i], j);
+                              bitSet(sampevent[i], 7);
+                              SerialPrint(F(" Port "), USB_UART_PORT, 0, 0, 0);
+                              SerialPrint(String(j + 1), USB_UART_PORT, 0, 0, 0);
+                              canset--;
+                            } else {
+                              SerialPrint(F(" Error!! No Port "), USB_UART_PORT, 0, 0, 0);
+                              SerialPrint(String(j + 1), USB_UART_PORT, 0, 0, 0);
+                            }
+                          }
+                        }
+                        SerialPrint("", USB_UART_PORT, 1, 1, 0);
+                      }
+                      EEPROM.write(ADDR_EVENT[i], sampevent[i]);
+                    }
+                  } else {
+                    SerialPrint(F("No Ports Selected... Exiting"), USB_UART_PORT, 1, 1, 0);
+                  }
+                } else {
+                  for (uint8_t i = 0; i < 4; i++) {
+                    sampevent[i] = 0;
+                  }
+                  eventflag = 0;
+                  canister = 1;
+                  bitSet(sampevent[0], 0);
+                  bitSet(sampevent[0], 7);
+                  EEPROM.write(ADDR_CANISTER, canister);
+                  EEPROM.write(ADDR_CANISTER_EVENT, eventflag);
+                  for (uint8_t i = 0; i < 4; i++) {
+                    EEPROM.write(ADDR_EVENT[i], sampevent[i]);
+                  }
+                  SerialPrint(F("Sample Port Config Complete"), USB_UART_PORT, 1, 1, 0);
+                }
+                system_response = "";
+                if (samptype == 3 && canister > 0) {
+                  uint8_t presnum = 0;
+                  if (tubestat < 2) {
+                    SerialPrint(F("Type All Pressure Port#'s"), USB_UART_PORT, 1, 1, 0);
+                    SerialDelay(USB_UART_PORT, 300);
+                    system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+    
+                    for (uint8_t i = 0; i < 4; i++) {
+                      pressuresamp[i] = 0;
+                      if (system_response.indexOf(String(i + 1)) > -1) {
+                        bitSet(pressuresamp[i], 7);
+                        presnum++;
+                        SerialPrint(F("Pressure Port "), USB_UART_PORT, 0, 0, 0);
+                        SerialPrint(String(i + 1), USB_UART_PORT, 0, 0, 0);
+                        SerialPrint(F(" Selected"), USB_UART_PORT, 1, 0, 0);
+                      }
+                    }
+                    SerialPrint("", USB_UART_PORT, 1, 0, 0);
+                    if (presnum > 0) {
+                      for (uint8_t i = 0; i < 4; i++) {
+                        if (bitRead(pressuresamp[i], 7) == 1) {
+                          SerialPrint(F("Type All Canister Port# for Pressure Port "), USB_UART_PORT, 0, 0, 0);
+                          SerialPrint(String(i + 1), USB_UART_PORT, 1, 1, 0);
+                          SerialDelay(USB_UART_PORT, 300);
+                          system_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+    
+                          SerialPrint(F("Pressure Port "), USB_UART_PORT, 0, 0, 0);
+                          SerialPrint(String(i + 1), USB_UART_PORT, 0, 0, 0);
+                          SerialPrint(":", USB_UART_PORT, 0, 0, 0);
+                          for (uint8_t j = 0; j < 4; j++) {
+                            if (system_response.indexOf(String(j + 1)) > -1) {
+                              if (bitRead(mout, 7) == 1) {
+                                bitSet(mout, i);
+                              }
+                              if (bitRead(canister, j) == 1) {
+                                bitSet(pressuresamp[i], j);
+                                bitSet(pressuresamp[i], 7);
+                                SerialPrint(F(" Sample Port "), USB_UART_PORT, 0, 0, 0);
+                                SerialPrint(String(j + 1), USB_UART_PORT, 0, 0, 0);
+                              } else {
+                                SerialPrint(F(" Error!! No Canister "), USB_UART_PORT, 0, 0, 0);
+                                SerialPrint(String(j + 1), USB_UART_PORT, 0, 0, 0);
+                              }
+                            }
+                          }
+                          SerialPrint(F(""), USB_UART_PORT, 1, 1, 0);
+                        }
+                        EEPROM.write(ADDR_PRESSURE[i], pressuresamp[i]);
+                      }
+                    }
+    
+                  } else {
+                    bitSet(pressuresamp[0], 0);
+                    bitSet(pressuresamp[0], 7);
+                    if (bitRead(mout, 7) == 1) {
+                      bitSet(mout, 1);
+                    }
+                  }
+                  EEPROM.write(ADDR_MOUT, mout);
+                }
+              } else {
+                SerialPrint(F("Quadrant Sampling Enabled, No Configuration Allowed)"), USB_UART_PORT, 1, 1, 0);
+              }
+            }
+          } while (system_response.indexOf("EXIT") == -1);
+          system_response = "";
+        }
+
+    if (system_response.indexOf("PID") > -1) {
+      pid_settings();
+    }
+  } while (system_response.indexOf(F("EXIT")) == -1);
+}
+
+/**
+  @brief  PID heater settings.
+*/
+void heater_settings() {
+  SerialPrint(F("Type 'CONSTANT', 'HUMID', or MAXLIMIT"), USB_UART_PORT, 1, 1, 0);
+  SerialClear(USB_UART_PORT, 1);
+  SerialDelay(USB_UART_PORT, 300);
+  String input = SerialRead(USB_UART_PORT, '\n', 1, 1);
+  if (input.indexOf(F("MAXLIMIT")) > -1) {
+    SerialPrint(F("Adjust Max Limit (YES)? PID Damage WARNING!"), USB_UART_PORT, 1, 1, 0);
+    SerialClear(USB_UART_PORT, 1);
+    SerialDelay(USB_UART_PORT, 300);
+
+    input = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+    if (input.indexOf("YES") > -1) {
+
+      SerialPrint(F("Type Maximum Heater Limit (50-255)"), USB_UART_PORT, 1, 1, 0);
+      SerialClear(USB_UART_PORT, 1);
+      SerialDelay(USB_UART_PORT, 300);
+
+      maxheat = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+
+      if ((maxheat > 49) && (maxheat <= 255)) {
+        SerialPrint(F("Max Limit : "), USB_UART_PORT, 0, 0, 0);
+        SerialPrint(String(maxheat), USB_UART_PORT, 1, 1, 0);
+        EEPROM.write(ADDR_HEATLIMIT, maxheat);
+      } else {
+        SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+      }
+    }
+  } else if (input.indexOf("CONSTANT") > -1) {
+
+    SerialPrint(F("Type 'ENABLE' or 'DISABLE'"), USB_UART_PORT, 1, 1, 0);
+    SerialClear(USB_UART_PORT, 1);
+    SerialDelay(USB_UART_PORT, 300);
+
+    input = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+    if (input.indexOf("ENABLE") > -1) {
+      SerialPrint(F("Heater Enabled"), USB_UART_PORT, 1, 1, 0);
+      heatctrl = 1;
+      EEPROM.write(ADDR_HEATCTRL, heatctrl);
+    } else if (input.indexOf("DISABLE") > -1) {
+      SerialPrint(F("Heater Disabled"), USB_UART_PORT, 1, 1, 0);
+      heatctrl = 0;
+      EEPROM.write(ADDR_HEATCTRL, heatctrl);
+    } else {
+      SerialPrint(F("Command Not Valid"), USB_UART_PORT, 1, 1, 0);
+    }
+
+    if (1 == heatctrl) {
+      SerialPrint(F("Adjust Setpoints ? (Yes / No)"), USB_UART_PORT, 1, 1, 0);
+      SerialClear(USB_UART_PORT, 1);
+      SerialDelay(USB_UART_PORT, 300);
+
+      input = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+      if (input.indexOf("YES") > -1) {
+
+        SerialPrint(F("Type Temp Offset (1 - 20C)"), USB_UART_PORT, 1, 1, 0);
+
+        SerialClear(USB_UART_PORT, 1);
+        SerialDelay(USB_UART_PORT, 300);
+
+        int16_t tempvar = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+
+        if ((tempvar > 0) && (tempvar <= 20)) {
+          heatval2 = tempvar;
+          SerialPrint(F("Temp Offset : "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(heatval2), USB_UART_PORT, 1, 1, 0);
+          EEPROM.write(ADDR_HEATVAL2, heatval2);
+        } else {
+          SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+        }
+      } else if (input.indexOf("NO") > -1) {
+      } else {
+        SerialPrint(F("Command Not Valid"), USB_UART_PORT, 1, 1, 0);
+      }
+    }
+  } else if (input.indexOf("HUMID") > -1) {
+
+    SerialPrint(F("WARNING!! Only Functions with Valid Humidity Reading"), USB_UART_PORT, 1, 1, 0);
+    SerialPrint(F("Type 'ENABLE' or 'DISABLE'"), USB_UART_PORT, 1, 1, 0);
+    SerialClear(USB_UART_PORT, 1);
+    SerialDelay(USB_UART_PORT, 300);
+    input = SerialRead(USB_UART_PORT, '\n', 1, 1);
+    if (input.indexOf("ENABLE") > -1) {
+      SerialPrint(F("Heater Enabled"), USB_UART_PORT, 1, 1, 0);
+      heatctrl = 1;
+      EEPROM.write(ADDR_HEATCTRL, heatctrl);
+    } else if (input.indexOf("DISABLE") > -1) {
+      SerialPrint(F("Heater Disabled"), USB_UART_PORT, 1, 1, 0);
+      heatctrl = 0;
+      EEPROM.write(ADDR_HEATCTRL, heatctrl);
+    } else {
+      SerialPrint(F("Command Not Valid"), USB_UART_PORT, 1, 1, 0);
+    }
+    if (1 == heatctrl) {
+      SerialPrint(F("Adjust Setpoints ? (Yes / No)"), USB_UART_PORT, 1, 1, 0);
+      SerialClear(USB_UART_PORT, 1);
+      SerialDelay(USB_UART_PORT, 300);
+      input = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+      if (input.indexOf("YES") > -1) {
+        SerialPrint(F("Type Humidity Threshold (0 - 95 % RH)"), USB_UART_PORT, 1, 1, 0);
+        SerialClear(USB_UART_PORT, 1);
+        SerialDelay(USB_UART_PORT, 300);
+        int8_t tempvar = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+        if ((tempvar >= 0) && (tempvar <= 95)) {
+          RHthreshold = tempvar;
+          SerialPrint(F("Humidity Threshold : "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(RHthreshold), USB_UART_PORT, 1, 1, 0);
+          EEPROM.write(ADDR_RH, lowByte(RHthreshold));
+        } else {
+          SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+        }
+
+        SerialPrint(F("Type Temp Offset (1 - 20C)"), USB_UART_PORT, 1, 1, 0);
+        SerialClear(USB_UART_PORT, 1);
+        SerialDelay(USB_UART_PORT, 300);
+        tempvar = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+
+        if ((tempvar > 0) && (tempvar <= 20)) {
+          heatval = tempvar;
+          SerialPrint(F("Temp Offset : "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(heatval), USB_UART_PORT, 1, 1, 0);
+          EEPROM.write(ADDR_HEATVAL, heatval);
+        } else {
+          SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+        }
+      } else if (input.indexOf("NO") > -1) {
+      } else {
+        SerialPrint(F("Command Not Valid"), USB_UART_PORT, 1, 1, 0);
+      }
+    }
+  }
+}
+
+/**
+  @brief  PID sensor settings.
+*/
+void SetNumOfVOCs(uint8_t numofPID) {
+  if (1 == numofPID) {
+    pid1en = 1;
+    pid2en = 0;
+    EEPROM.update(ADDR_PID1_EN, pid1en);
+    EEPROM.update(ADDR_PID2_EN, pid2en);
+    if (RAMP == deviceType) {
+      co2sel = EEPROM.read(ADDR_CO2SEL);
+      if (co2sel == ONLY_CO2_SELECTED) {
+        co2sel = CO2_VOC_SELECTED;
+        EEPROM.write(ADDR_CO2SEL, co2sel);
+      } else {
+        co2sel = ONLY_VOC_SELECTED;
+        EEPROM.write(ADDR_CO2SEL, co2sel);
+      }
+    }
+    SerialPrint(F("PID1 Enabled"), USB_UART_PORT, 1, 0, 0);
+  } else if ((2 == numofPID) && (echemnum == 0)) {
+    pid1en = 1;
+    pid2en = 1;
+    EEPROM.update(ADDR_PID1_EN, pid1en);
+    EEPROM.update(ADDR_PID2_EN, pid2en);
+    if (RAMP == deviceType) {
+      co2sel = EEPROM.read(ADDR_CO2SEL);
+      if (co2sel == ONLY_CO2_SELECTED) {
+        co2sel = CO2_VOC_SELECTED;
+        EEPROM.write(ADDR_CO2SEL, co2sel);
+      } else {
+        co2sel = ONLY_VOC_SELECTED;
+        EEPROM.write(ADDR_CO2SEL, co2sel);
+      }
+    }
+    SerialPrint(F("PID1 & PID2 are Enabled"), USB_UART_PORT, 1, 0, 0);
+  } else if (0 == numofPID) {
+    pid1en = 0;
+    pid2en = 0;
+    EEPROM.update(ADDR_PID1_EN, pid1en);
+    EEPROM.update(ADDR_PID2_EN, pid2en);
+    if (RAMP == deviceType) {
+      co2sel = EEPROM.read(ADDR_CO2SEL);
+      if (co2sel == CO2_VOC_SELECTED) {
+        co2sel = ONLY_CO2_SELECTED;
+        EEPROM.write(ADDR_CO2SEL, co2sel);
+      } else {
+        co2sel = NO_CO2_VOC;
+        EEPROM.write(ADDR_CO2SEL, co2sel);
+      }
+    }
+  } else {
+    SerialPrint(F("Invalid Input!...Default state of both VOCs Disabled"), USB_UART_PORT, 1, 0, 0);
+    pid1en = 0;
+    pid2en = 0;
+    EEPROM.update(ADDR_PID1_EN, pid1en);
+    EEPROM.update(ADDR_PID2_EN, pid2en);
+  }
+}
+/**
+  @brief  PID sensor settings.
+*/
+void pid_settings() {
+  String response = "";
+  do {
+    SerialPrint(F("Type PIDCAL, HEAT, SENSOR, or EXIT"), USB_UART_PORT, 1, 1, 0);
+    SerialClear(USB_UART_PORT, 1);
+    SerialDelay(USB_UART_PORT, 300);
+    response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+    if (response.indexOf(F("RUNTIME")) > -1) {
+      SerialPrint(F("Run Time: "), USB_UART_PORT, 0, 0, 0);
+      // SerialPrint(String(runtime), USB_UART_PORT, 1, 1, 0);
+
+    } else if (response.indexOf(F("SENSOR")) > -1) {
+      do {
+        SerialPrint(F("Type ERROR, REPLACE, SET, PIDNUM or EXIT"), USB_UART_PORT, 1, 1, 0);
+        SerialDelay(USB_UART_PORT, 300);
+        response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+        if (response.indexOf(F("PIDNUM")) > -1) {
+          SerialPrint(F("Enter Number of PIDs (1 or 2)"), USB_UART_PORT, 1, 0, 0);
+          SerialDelay(USB_UART_PORT, 300);
+          uint8_t numofPID = SerialRead(USB_UART_PORT, '\n', 1, 1).toInt();
+          SetNumOfVOCs(numofPID);
+        }
+
+        // Reference from the SPOD firmware shared by Jacob
+        /*if (response.indexOf(F("TYPE")) > -1) {
+          uint8_t pidsel = 0;
+          if (1 == pid2en) {
+            SerialPrint(F("Type Sen Number (1 or 2)"), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 300);
+            pidsel = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt() - 1;
+          }
+          if ((0 == pidsel) || (1 == pidsel)) {
+            SerialPrint(F("Type PID or MOS"), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 300);
+            response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+            if (response.indexOf(F("PID")) > -1) {
+              if (0 == pidsel) {
+                pid1en = 0;
+              }
+              if (1 == pidsel) {
+                pid2en = 1;
+              }
+            }
+            if (response.indexOf(F("MOS")) > -1) {
+              if (0 == pidsel) {
+                pid1en = 0;
+              }
+              if (1 == pidsel) {
+                pid2en = 1;
+              }
+            }
+            // EEPROM.update(ADDR_PID1_EN, pid1en);
+            // EEPROM.update(ADDR_PID2_EN, pid2en);
+          }
+          }*/
+        if (response.indexOf(F("REPLACE")) > -1) {
+          uint8_t pidsel = 0;
+          if (pid2en == 1) {
+            SerialPrint(F("Type Sen Number (1 or 2)"), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 300);
+            pidsel = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt() - 1;
+          }
+          if ((0 == pidsel) || (1 == pidsel)) {
+            SerialPrint(F("Sen"), USB_UART_PORT, 0, 0, 0);
+            SerialPrint(String(pidsel + 1), USB_UART_PORT, 0, 0, 0);
+            SerialPrint(F(" Replaced, Hours Reset, Slope/Offset Reset"), USB_UART_PORT, 1, 1, 0);
+            if (0 == pidsel) {
+              slopeadj1 = 100;
+              PIDoffset1 = 0;
+              EEPROM.write(ADDR_PID_OFFSETL1, lowByte(PIDoffset1));
+              EEPROM.write(ADDR_PID_OFFSETH1, highByte(PIDoffset1));
+              EEPROM.write(ADDR_PID_SLOPEADJ1, slopeadj1);
+              pidhours[pidsel] = 0;
+              EEPROM.put(ADDR_PID1_HOUR, pidhours[pidsel]);
+            } else {
+              slopeadj2 = 100;
+              PIDoffset2 = 0;
+              EEPROM.write(ADDR_PID_OFFSETL2, lowByte(PIDoffset2));
+              EEPROM.write(ADDR_PID_OFFSETH2, highByte(PIDoffset2));
+              EEPROM.write(ADDR_PID_SLOPEADJ2, slopeadj2);
+              pidhours[pidsel] = 0;
+              EEPROM.put(ADDR_PID2_HOUR, pidhours[pidsel]);
+            }
+          }
+        }
+
+        else if (response.indexOf(F("SET")) > -1) {
+          uint8_t pidsel = 0;
+          if (1 == pid2en) {
+            SerialPrint(F("Type Sen Number (1 or 2)"), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 300);
+            pidsel = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt() - 1;
+          }
+
+          SerialPrint(F("Type Number of Hours"), USB_UART_PORT, 1, 1, 0);
+          SerialDelay(USB_UART_PORT, 300);
+          pidhours[pidsel] = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+          SerialPrint(F("Sen"), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(pidsel + 1), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(F(" Hours Set:"), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(pidhours[pidsel]), USB_UART_PORT, 1, 1, 0);
+          if (0 == pidsel) {
+            EEPROM.put(ADDR_PID1_HOUR, pidhours[pidsel]);
+          } else {
+            EEPROM.put(ADDR_PID2_HOUR, pidhours[pidsel]);
+          }
+        } else if (response.indexOf(F("ERROR")) > -1) {
+
+          uint8_t pidsel = 0;
+          if (1 == pid2en) {
+            SerialPrint(F("Type Sen Number (1 or 2)"), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 300);
+            pidsel = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt() - 1;
+          }
+
+          SerialPrint(F("Type ERROR threshold in mV"), USB_UART_PORT, 1, 1, 0);
+          SerialDelay(USB_UART_PORT, 300);
+          pidthresh[pidsel] = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+          SerialPrint(F("Error Threshold Set:"), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(pidthresh[pidsel]), USB_UART_PORT, 1, 1, 0);
+          if (0 == pidsel) {
+            EEPROM.write(ADDR_PID_THRESH1, pidthresh[pidsel]);
+          } else {
+            EEPROM.write(ADDR_PID_THRESH2, pidthresh[pidsel]);
+          }
+        }
+      } while (response.indexOf("EXIT") == -1);
+      response = "";
+    } else if (response.indexOf(F("PIDCAL")) > -1) {
+      do {
+        //Jacob -- 19112021 Production asked for ability to view manual zero reading
+        SerialPrint(F("Type AUTOMATIC, CALADJ, CONSTRAIN, DISPLAY, SENSITIVITY, ZERO, or EXIT"), USB_UART_PORT, 1, 1, 0);
+        SerialDelay(USB_UART_PORT, 300);
+        response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+        if (response.indexOf(F("DISPLAY")) > -1) {
+          SerialPrint(F("Sen1 Zero Level: "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(float(PIDzero1 / 100.00)), USB_UART_PORT, 1, 0, 0);
+          SerialPrint(F("Sen1 Sensitivity Level: "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(float(PIDslope1 / 1000.00)), USB_UART_PORT, 1, 0, 0);
+          SerialPrint(F("Sen1 Offset: "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(float(PIDoffset1) / 100.00), USB_UART_PORT, 1, 0, 0);
+          SerialPrint(F("Sen1 SlopeAdj: "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(float(slopeadj1) / 100.00), USB_UART_PORT, 1, 1, 0);
+
+          if (1 == pid2en) {
+            SerialPrint(F("Sen2 Zero Level: "), USB_UART_PORT, 0, 0, 0);
+            SerialPrint(String(float(PIDzero2 / 100.00)), USB_UART_PORT, 1, 0, 0);
+            SerialPrint(F("Sen2 Sensitivity Level: "), USB_UART_PORT, 0, 0, 0);
+            SerialPrint(String(float(PIDslope2 / 1000.00)), USB_UART_PORT, 1, 0, 0);
+            SerialPrint(F("Sen2 Offset: "), USB_UART_PORT, 0, 0, 0);
+            SerialPrint(String(float(PIDoffset2) / 100.00), USB_UART_PORT, 1, 0, 0);
+            SerialPrint(F("Sens2 SlopeAdj: "), USB_UART_PORT, 0, 0, 0);
+            SerialPrint(String(float(slopeadj2) / 100.00), USB_UART_PORT, 1, 1, 0);
+          }
+        } else if (response.indexOf(F("CALADJ")) > -1) {
+          SerialPrint(F("Type OFFSET or SLOPE"), USB_UART_PORT, 1, 1, 0);
+          SerialClear(USB_UART_PORT, 1);
+          SerialDelay(USB_UART_PORT, 300);
+
+          response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+          if (response.indexOf(F("OFFSET")) > -1) {
+            int sensornum = 1;
+            if (1 == pid2en) {
+              SerialPrint(F("Type Sensor (1 or 2)"), USB_UART_PORT, 1, 1, 0);
+              SerialDelay(USB_UART_PORT, 300);
+              sensornum = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+              if (1 == sensornum) {
+                SerialPrint(F("Sen1 Selected..."), USB_UART_PORT, 0, 0, 0);
+              } else if (2 == sensornum) {
+                SerialPrint(F("Sen2 Selected..."), USB_UART_PORT, 0, 0, 0);
+              } else {
+                SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+                sensornum = 0;
+              }
+            }
+
+            if ((1 == sensornum) || (2 == sensornum)) {
+              base = 0;
+              EEPROM.write(ADDR_PID_BASE, base);
+              SerialPrint(F("Type Offset in Units (-100 to 100) or RESET"), USB_UART_PORT, 1, 1, 0);
+              SerialDelay(USB_UART_PORT, 300);
+
+              response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+              if (response.indexOf(F("RESET")) > -1) {
+                SerialPrint(F("New Offset Value : "), USB_UART_PORT, 0, 0, 0);
+                SerialPrint("0.00", USB_UART_PORT, 1, 1, 0);
+                if (1 == sensornum) {
+                  PIDoffset1 = 0;
+                  EEPROM.write(ADDR_PID_OFFSETL1, 0);
+                  EEPROM.write(ADDR_PID_OFFSETH1, 0);
+                } else {
+                  PIDoffset2 = 0;
+                  EEPROM.write(ADDR_PID_OFFSETL2, 0);
+                  EEPROM.write(ADDR_PID_OFFSETH2, 0);
+                }
+              } else {
+                float tempoffset = response.toFloat();
+
+                if ((tempoffset >= -100.00) && (tempoffset <= 100.00)) {
+                  tempoffset = tempoffset * 100;
+                  tempoffset += PIDoffset1;
+                  if (tempoffset > 32767) {
+                    tempoffset = 32767;
+                  } else if (tempoffset < -32768) {
+                    tempoffset = -32768;
+                  }
+                  SerialPrint(F("New Offset Value : "), USB_UART_PORT, 0, 0, 0);
+                  SerialPrint(String(float(tempoffset) / 100.00), USB_UART_PORT, 1, 1, 0);
+                  if (1 == sensornum) {
+                    PIDoffset1 = int16_t(tempoffset);
+                    EEPROM.write(ADDR_PID_OFFSETL1, lowByte(PIDoffset1));
+                    EEPROM.write(ADDR_PID_OFFSETH1, highByte(PIDoffset1));
+                  } else {
+                    PIDoffset2 = int16_t(tempoffset);
+                    EEPROM.write(ADDR_PID_OFFSETL2, lowByte(PIDoffset2));
+                    EEPROM.write(ADDR_PID_OFFSETH2, highByte(PIDoffset2));
+                  }
+                }
+              }
+            } else {
+              SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+            }
+          }
+          if (response.indexOf(F("SLOPE")) > -1) {
+            uint8_t sensornum = 1;
+            if (1 == pid2en) {
+              SerialPrint(F("Type Sensor (1 or 2)"), USB_UART_PORT, 1, 1, 0);
+              SerialDelay(USB_UART_PORT, 300);
+              sensornum = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+              if (1 == sensornum) {
+                SerialPrint(F("Sen1 Selected..."), USB_UART_PORT, 0, 0, 0);
+              } else if (2 == sensornum) {
+                SerialPrint(F("Sen2 Selected..."), USB_UART_PORT, 0, 0, 0);
+              } else {
+                SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+                sensornum = 0;
+              }
+            }
+
+            if ((1 == sensornum) || (2 == sensornum)) {
+              base = 0;
+              EEPROM.write(ADDR_PID_BASE, base);
+              SerialPrint(F("Type Slope Adj (0.4 to 2.5) or RESET"), USB_UART_PORT, 1, 1, 0);
+              SerialDelay(USB_UART_PORT, 300);
+
+              response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+              if (response.indexOf(F("RESET")) > -1) {
+                SerialPrint(F("New Slope Value: "), USB_UART_PORT, 0, 0, 0);
+                SerialPrint("1.00", USB_UART_PORT, 1, 1, 0);
+                if (1 == sensornum) {
+                  slopeadj1 = 100;
+                  EEPROM.write(ADDR_PID_SLOPEADJ1, slopeadj1);
+                } else {
+                  slopeadj2 = 100;
+                  EEPROM.write(ADDR_PID_SLOPEADJ2, slopeadj2);
+                }
+              } else {
+                float tempslope = response.toFloat();
+                if ((tempslope >= 0.40) && (tempslope <= 2.5)) {
+                  if (1 == sensornum) {
+                    tempslope = tempslope * float(slopeadj1);
+                  } else {
+                    tempslope = tempslope * float(slopeadj2);
+                  }
+
+                  if (int16_t(tempslope) > 250) {
+                    tempslope = 250.00;
+                  } else if (int16_t(tempslope) < 1) {
+                    tempslope = 1;
+                  }
+                  SerialPrint(F("New Slope Value: "), USB_UART_PORT, 0, 0, 0);
+                  SerialPrint(String(tempslope / 100.00), USB_UART_PORT, 1, 1, 0);
+
+                  if (1 == sensornum) {
+                    slopeadj1 = tempslope;
+                    EEPROM.write(ADDR_PID_SLOPEADJ1, byte(slopeadj1));
+                  } else {
+                    slopeadj2 = tempslope;
+                    EEPROM.write(ADDR_PID_SLOPEADJ2, byte(slopeadj2));
+                  }
+                }
+              }
+            } else {
+              SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+            }
+          }
+        } else if (response.indexOf(F("AUTOMATIC")) > -1) {
+          SerialPrint(F("Type ENABLE or DISABLE"), USB_UART_PORT, 1, 1, 0);
+          SerialDelay(USB_UART_PORT, 300);
+          response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+          if (response.indexOf(F("ENABLE")) > -1) {
+            base = 1;
+            SerialPrint(F("Auto Baseline Enabled"), USB_UART_PORT, 1, 1, 0);
+            EEPROM.write(ADDR_PID_BASE, base);
+          } else if (response.indexOf(F("DISABLE")) > -1) {
+            base = 0;
+            SerialPrint(F("Auto Baseline Disabled"), USB_UART_PORT, 1, 1, 0);
+            EEPROM.write(ADDR_PID_BASE, base);
+          } else {
+            SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+          }
+        } else if (response.indexOf(F("SENSITIVITY")) > -1) {
+          int sensornum = 1;
+          if (1 == pid2en) {
+            SerialPrint(F("Type Sen Element (1 or 2)"), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 300);
+            sensornum = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+            if (1 == sensornum) {
+              SerialPrint(F("Sen1 Selected..."), USB_UART_PORT, 0, 0, 0);
+            } else if (2 == sensornum) {
+              SerialPrint(F("Sen2 Selected..."), USB_UART_PORT, 0, 0, 0);
+            } else {
+              SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+              sensornum = 0;
+            }
+          }
+
+          if ((1 == sensornum) || (2 == sensornum)) {
+            base = 0;
+            EEPROM.write(ADDR_PID_BASE, base);
+            SerialPrint(F("Type Sensitivity in Units/mV (0 to 65)"), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 300);
+
+            response = SerialRead(USB_UART_PORT, '\n', 1, 0);
+
+            float tempsens = response.toFloat();
+
+            if ((tempsens >= 0.00) && (tempsens <= 65.00)) {
+              SerialPrint(F("New Sensitivity Value : "), USB_UART_PORT, 0, 0, 0);
+              SerialPrint(String(tempsens), USB_UART_PORT, 1, 1, 0);
+              tempsens = tempsens * 1000;
+
+              if (1 == sensornum) {
+                PIDslope1 = int(tempsens);
+                EEPROM.write(ADDR_PID_SLOPEL1, lowByte(PIDslope1));
+                EEPROM.write(ADDR_PID_SLOPEL1, highByte(PIDslope1));
+              } else if (sensornum == 2) {
+                PIDslope2 = int(tempsens);
+                EEPROM.write(ADDR_PID_SLOPEL2, lowByte(PIDslope2));
+                EEPROM.write(ADDR_PID_SLOPEL2, highByte(PIDslope2));
+              }
+            } else {
+              SerialPrint(F("Sensitivity Out of Range"), USB_UART_PORT, 1, 1, 0);
+            }
+          }
+        } else if (response.indexOf(F("ZERO")) > -1) {
+          uint8_t sensornum = 1;
+          if (1 == pid2en) {
+            SerialPrint(F("Type Sen Element (1 or 2)"), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 300);
+            sensornum = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+            if (1 == sensornum) {
+              SerialPrint(F("Sen1 Selected..."), USB_UART_PORT, 0, 0, 0);
+            } else if (2 == sensornum) {
+              SerialPrint(F("Sen2 Selected..."), USB_UART_PORT, 0, 0, 0);
+            } else {
+              SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+              sensornum = 0;
+            }
+          }
+
+          if ((1 == sensornum) || (2 == sensornum)) {
+            base = 0;
+            EEPROM.write(ADDR_PID_BASE, base);
+            SerialPrint(F("Type Zero Level in mV (0 to 300)"), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 300);
+
+            response = SerialRead(USB_UART_PORT, '\n', 1, 0);
+
+            float tempzero = response.toFloat();
+
+            if ((tempzero >= 0.00) && (tempzero <= 300.00)) {
+              SerialPrint(F("New Zero Value : "), USB_UART_PORT, 0, 0, 0);
+              SerialPrint(String(tempzero), USB_UART_PORT, 1, 1, 0);
+              tempzero = tempzero * 100;
+
+              if (sensornum == 1) {
+                PIDzero1 = int16_t(tempzero);
+                EEPROM.write(ADDR_PID_ZEROL1, lowByte(PIDzero1));
+                EEPROM.write(ADDR_PID_ZEROH1, highByte(PIDzero1));
+              } else if (sensornum == 2) {
+                PIDzero2 = int16_t(tempzero);
+                EEPROM.write(ADDR_PID_ZEROL2, lowByte(PIDzero2));
+                EEPROM.write(ADDR_PID_ZEROH2, highByte(PIDzero2));
+              }
+            } else {
+              SerialPrint(F("Baseline Out of Range"), USB_UART_PORT, 1, 1, 0);
+            }
+          }
+        }
+      } while (response.indexOf("EXIT") == -1);
+      response = "";
+    } else if (response.indexOf("HEAT") > -1) {
+      heater_settings();
+    }
+  } while (response.indexOf("EXIT") == -1);
+  response = "";
+}
+
+/**
+  @brief  Function for set cellular signal settings.
+*/
+void signal_settings() {
+  uint8_t cur_debug = debug;
+  uint8_t regstatus = 0;
+  pdpact = 0;
+  debug = 1;
+  uint32_t actmillis = millis();
+  String cellular_response = "";
+
+  SerialPrint(F("Powering Up GSM Module"), USB_UART_PORT, 1, 1, 0);
+  digitalWrite(GSM_POW_EN, HIGH);
+  delay(1000);
+  gsm_power_toggle();
+  gsm_comm_check(0);
+
+  if (1 == commstat) {
+    uint32_t previous = millis();
+    do {
+      cellular_response = sendATcommand(0, F("AT+CPIN?"), 1, F("OK"));
+      if (cellular_response.indexOf(F("READY")) == -1) {
+        delay(1000);
+      }
+      if (((millis() - previous) > 10000) || (0 == cellular_response.length())) {
+        previous = millis();
+        gsmreset++;
+        sendATcommand(0, F("AT+CFUN=1,1"), 10, "RDY");
+      }
+      if ((gsmreset > 1) || (0 == cellular_response.length())) {
+        bitSet(initfail, 2);
+        break;
+      }
+    } while (cellular_response.indexOf(F("READY")) == -1);
+
+    cellconfig(0);
+    /*if (upgrade > 0) {
+      upgrade = 0;
+      EEPROM.write(ADDR_UPGRDFLAG, upgrade);
+      }*/
+    debug = 0;
+    SerialClear(USB_UART_PORT, 1);
+    SerialPrint(F("Hit Enter to Stop"), USB_UART_PORT, 1, 1, 0);
+
+    uint8_t signalac = 1;
+    do {
+
+      cellular_response = sendATcommand(0, F("AT+CSQ"), 5, F("OK"));
+      cellular_response = cellular_response.substring(cellular_response.indexOf(":") - 3, cellular_response.indexOf(F("OK")));
+      cellular_response.trim();
+      SerialPrint(cellular_response, USB_UART_PORT, 0, 0, 0);
+      SerialPrint(F(" Reg Status:"), USB_UART_PORT, 0, 0, 0);
+      cellular_response = sendATcommand(0, F("AT+CREG?"), 5, F("OK"));
+      cellular_response = cellular_response.substring(cellular_response.indexOf(",") + 1, cellular_response.indexOf(F("OK")));
+      cellular_response.trim();
+      if ((cellular_response.indexOf(F("1")) > -1) || (cellular_response.indexOf(F("5")) > -1)) {
+        bitSet(regstatus, 0);
+      }
+      SerialPrint(cellular_response + ",", USB_UART_PORT, 0, 0, 0);
+      cellular_response = sendATcommand(0, F("AT+CGREG?"), 5, F("OK"));
+      cellular_response = cellular_response.substring(cellular_response.indexOf(",") + 1, cellular_response.indexOf(F("OK")));
+      cellular_response.trim();
+      if ((cellular_response.indexOf(F("1")) > -1) || (cellular_response.indexOf(F("5")) > -1)) {
+        bitSet(regstatus, 1);
+      }
+      SerialPrint(cellular_response + ",", USB_UART_PORT, 0, 0, 0);
+      cellular_response = sendATcommand(0, F("AT+CEREG?"), 5, F("OK"));
+      cellular_response = cellular_response.substring(cellular_response.indexOf(",") + 1, cellular_response.indexOf(F("OK")));
+      cellular_response.trim();
+      if ((cellular_response.indexOf(F("1")) > -1) || (cellular_response.indexOf(F("5")) > -1)) {
+        bitSet(regstatus, 1);
+      }
+      SerialPrint(cellular_response, USB_UART_PORT, 0, 0, 0);
+
+      if ((regstatus > 1) && (0 == pdpact) && ((millis() - actmillis) > 10000)) {
+        activatepdp(0, 0);
+        actmillis = millis();
+      }
+      SerialPrint(F(" Data Status:"), USB_UART_PORT, 0, 0, 0);
+      if (0 == pdpact) {
+        SerialPrint(F("OFFLINE "), USB_UART_PORT, 0, 0, 0);
+      } else {
+        SerialPrint(F("ONLINE "), USB_UART_PORT, 0, 0, 0);
+      }
+      if ((cellmodule.indexOf(F("BG")) > -1) || (cellmodule.indexOf(F("EG")) > -1)) {
+        cellular_response = sendATcommand(0, F("AT+QCSQ"), 5, F("OK"));
+        cellular_response = cellular_response.substring(cellular_response.indexOf(":") + 2, cellular_response.indexOf(F("OK")));
+        cellular_response.trim();
+        SerialPrint(cellular_response + "  ", USB_UART_PORT, 0, 0, 0);
+        cellular_response = sendATcommand(0, F("AT+QNWINFO"), 5, F("OK"));
+        cellular_response = cellular_response.substring(cellular_response.indexOf(":") + 2, cellular_response.indexOf(F("OK")));
+        cellular_response.trim();
+        SerialPrint(cellular_response, USB_UART_PORT, 1, 0, 0);
+      } else {
+        SerialPrint("", USB_UART_PORT, 1, 0, 0);
+      }
+      cellular_response = SerialRead(USB_UART_PORT, '\n', 0, 0);
+      delay(1000);
+      if (cellular_response.length() > 0) {
+        signalac = 0;
+      }
+    } while (1 == signalac);
+    GSM_STATUS = GSM_TURN_OFF;
+    //Jacob 07132022 Add time sync with signal check.
+    if (1 == autotime) {
+      CELL_time(0);
+    }
+    SerialPrint(F("Powering Down GSM Module"), USB_UART_PORT, 1, 1, 0);
+    sendATcommand(0, F("AT+QPOWD"), 10, F("POWERED DOWN"));
+    pdpact = 0;
+  }
+  delay(2000);
+  GSM_STATUS = GSM_TURN_OFF;
+  digitalWrite(GSM_POW_EN, LOW);
+  debug = cur_debug;
+  SerialClear(USB_UART_PORT, 1);
+  cellular_response = "";
+}
+
+/**
+  @brief  Function for set device id.
+*/
+void set_device_id() {
+  SerialPrint(F("Type Sensor ID value (1 - 65535)"), USB_UART_PORT, 1, 1, 0);
+  SerialClear(USB_UART_PORT, 1);
+  SerialDelay(USB_UART_PORT, 300);
+  uint32_t tempid = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+  if ((tempid >= 1) && (tempid <= 65535)) {
+    idnum = tempid;
+    SerialPrint(F("Address Set : "), USB_UART_PORT, 0, 0, 0);
+    EEPROM.get(ADDR_DEVICE_TYPE, deviceType);
+    if (RAMP == deviceType) {
+      sprintf(address, "RAMP%05d", idnum);
+    } else {
+      sprintf(address, "SPOD%05d", idnum);
+    }
+    SerialPrint(address, USB_UART_PORT, 1, 1, 0);
+    EEPROM.put(ADDR_SENSORID, idnum);
+  } else {
+    SerialPrint(F("Address Not Valid"), USB_UART_PORT, 1, 1, 0);
+  }
+}
+
+/**
+  @brief Set device type RAMP/SPOD
+*/
+bool set_device_type() {
+  do {
+    SerialPrint(F("Select Device Type by entering number, 1: for RAMP or 2: for SPOD"), USB_UART_PORT, 1, 1, 0);
+    SerialDelay(USB_UART_PORT, 300);
+    deviceType = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+    if ((RAMP == deviceType) || (SPOD == deviceType)) {
+      EEPROM.write(ADDR_DEVICE_TYPE, deviceType);
+      break;
+    } else {
+      SerialPrint(F("Error... Try Again"), USB_UART_PORT, 1, 1, 0);
+      return false;
+    }
+  } while (1);
+  return true;
+}
+
+/**
+  @brief  Function for factory settings.
+*/
+void factory_settings() {
+  while(false == set_device_type());
+  set_device_id();
+  set_device_time();
+  setdefault();
+
+  if (RAMP == deviceType) {
+    do {
+      SerialPrint(F("Type number of Echem Sensors"), USB_UART_PORT, 1, 1, 0);
+      SerialDelay(USB_UART_PORT, 300);
+      uint8_t tempinput = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+      if (set_echemnum((uint8_t)tempinput) == true)  //set_echemnum configures the total configured ECHEM sensors on this RAMP*/
+      {
+        break;
+      } else {
+        SerialPrint(F("Error... Try Again"), USB_UART_PORT, 1, 1, 0);
+      }
+    } while (1);
+
+    uint8_t select = 0;
+    if (echemnum > 0) /*If more than 1 ECHEM sensor is configured then get the SENSOR details on each slot*/
+    {
+      for (uint8_t i = 1; i <= echemnum; i++)  //echem position starts from 1 up to 4 based on configured echemnum value: [1:Slot-1, 2: Slot-2, 3:Slot-3, 4:Slot-4]
+      {
+        select = 0;
+        do {
+          SerialPrint(F("Sensor Type Position "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(String(i), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(F(" (Priority CO, H2S, SO2, NO, NO2, O3, NH3)...."), USB_UART_PORT, 0, 0, 0);
+          SerialDelay(USB_UART_PORT, 300);
+          String input = SerialRead(USB_UART_PORT, '\n', 1, 1);
+          input.toUpperCase();
+          SerialPrint(input, USB_UART_PORT, 1, 1, 0);
+
+          //Uncomment below String fro debug purposes
+          //String echemSensorMap = "";
+
+          for (uint8_t j = 0; j < echemlist; j++) {
+            //if (input.indexOf(sensorlist(j)) > -1)
+            if (input.equals(sensorlist(j))) {
+              ecmap[i - 1] = j;
+              select = 1;
+              //Uncomment below lines for debug purposes
+              /*
+                echemSensorMap += "ecmap[";
+                echemSensorMap += String(i-1);
+                echemSensorMap += "]:";
+                echemSensorMap += String(ecmap[i-1]);
+                echemSensorMap += " = "
+                echemSensorMap += String(sensorlist(ecmap[i-1]));
+                SerialPrint(echemSensorMap, USB_UART_PORT, 1,0,0);
+              */
+            }
+          }
+        } while (select == 0);
+      }
+
+    }  // end of if (echemnum > 0)
+    // Set sensor offset parameters in EEPROM (Offset = 0, Slope = 1)
+    for (uint8_t i = 0; i < 8; i++) {
+      //reset the offset to zero as default (default x 10)
+      EEPROM.update(addr_offsetlo[i], 0);
+      EEPROM.update(addr_offsethi[i], 0);
+
+      //reset the slope to 1 as default (default x 1000)
+      EEPROM.update(addr_slopelo[i], lowByte(1000));
+      EEPROM.update(addr_slopehi[i], highByte(1000));
+    }
+
+    // Set ECHEM parameters (Based on Average Parameters)
+    for (uint8_t i = 0; i < echemnum; i++) {
+      aux_b[i] = auxb_hash[ecmap[i]];
+      act_b[i] = actb_hash[ecmap[i]];
+      sen_m[i] = senm_hash[ecmap[i]];
+
+      EEPROM.update(addr_ecmap[i], ecmap[i]);
+
+      EEPROM.update(addr_aux_blo[i], lowByte(aux_b[i]));
+      EEPROM.update(addr_aux_bhi[i], highByte(aux_b[i]));
+
+      EEPROM.update(addr_act_blo[i], lowByte(act_b[i]));
+      EEPROM.update(addr_act_bhi[i], highByte(act_b[i]));
+
+      EEPROM.update(addr_sen_mlo[i], lowByte(sen_m[i]));
+      EEPROM.update(addr_sen_mhi[i], highByte(sen_m[i]));
+      if (ecmap[i] == 3)  //Only if the slot-4 is O3 sensor then for compensation purposes update the secondary sensitivity parameter.
+      {                   // Secondary (NO2) Sensitivity for O3 Sensor
+        sen_m[4] = senm_hash[7];
+        EEPROM.update(addr_sen_mlo[4], lowByte(sen_m[4]));
+        EEPROM.update(addr_sen_mhi[4], highByte(sen_m[4]));
+      }
+    }
+  }  // end of if (RAMP == deviceType)
+
+  do {
+    SerialPrint(F("Type number of PM Sensors"), USB_UART_PORT, 1, 1, 0);
+    SerialDelay(USB_UART_PORT, 300);
+    uint8_t tempinput = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+    if (set_pmnum((byte)tempinput) == true) {
+      break;
+    } else {
+      SerialPrint(F("Error... Try Again"), USB_UART_PORT, 1, 1, 0);
+    }
+  } while (1);
+
+  if (pmnum > 0) {
+    do {
+      SerialPrint(F("PM Variant: Type "), USB_UART_PORT, 0, 0, 0);
+      if ((SPOD == deviceType) || (echemnum == 0)) {
+        SerialPrint(F("STD,"), USB_UART_PORT, 0, 0, 0);
+      }
+      SerialPrint(F(" PTR_RHT, SENSIRION"), USB_UART_PORT, 1, 1, 0);
+      SerialDelay(USB_UART_PORT, 300);
+      String input = SerialRead(USB_UART_PORT, '\n', 1, 1);
+      if ((input.indexOf(F("STD")) > -1) && ((SPOD == deviceType) || (echemnum == 0))) {
+        SerialPrint(F("Standard PM Selected"), USB_UART_PORT, 1, 1, 0);
+        pmtype = STANDARD_PMSENSOR;
+        break;
+      } else if (input.indexOf(F("PTR_RHT")) > -1) {
+        SerialPrint(F("RH_T_PMSENSOR Variant Selected"), USB_UART_PORT, 1, 1, 0);
+        pmtype = RH_T_PMSENSOR;
+        break;
+      } else if (input.indexOf(F("SENSIRION")) > -1) {
+        SerialPrint(F("RH_T_SENSIRION Variant Selected"), USB_UART_PORT, 1, 1, 0);
+        pmtype = RH_T_SENSIRION;
+        break;
+      } else {
+        SerialPrint(F("Error... Try Again"), USB_UART_PORT, 1, 1, 0);
+      }
+    } while (1);
+    EEPROM.write(ADDR_PMTYPE, pmtype);
+
+  }  // end of if (pmnum > 0)
+  for (uint8_t i = 8; i < 11; i++) {
+    EEPROM.put(ADDR_OFFSETPM1_2 + ((i - 8) * 2), (int16_t)0);
+    offsetcalc[i] = 0.00;
+    EEPROM.put(ADDR_SLOPEPM1_2 + ((i - 8) * 2), (uint16_t)1000);
+    slopecalc[i] = 1.00;
+  }
+  if (RAMP == deviceType) {
+    do {
+      SerialPrint(F("Select type: CO2, VOC, BOTH or NONE"), USB_UART_PORT, 1, 1, 0);
+      SerialDelay(USB_UART_PORT, 300);
+
+      String input = SerialRead(USB_UART_PORT, '\n', 1, 1);
+      if (input.indexOf(F("NONE")) > -1) {
+        SerialPrint(F("No CO2 or VOC"), USB_UART_PORT, 1, 1, 0);
+        co2sel = NO_CO2_VOC;
+        break;
+      } else if (input.indexOf(F("CO2")) > -1) {
+        SerialPrint(F("CO2 Selected"), USB_UART_PORT, 1, 1, 0);
+        co2sel = ONLY_CO2_SELECTED;
+        break;
+      } else if (input.indexOf(F("VOC")) > -1) {
+        SerialPrint(F("VOC selected"), USB_UART_PORT, 1, 1, 0);
+        co2sel = ONLY_VOC_SELECTED;
+        break;
+      } else if (input.indexOf(F("BOTH")) > -1) {
+        SerialPrint(F("CO2 and VOC Selected"), USB_UART_PORT, 1, 1, 0);
+        co2sel = CO2_VOC_SELECTED;
+        break;
+      } else {
+        SerialPrint(F("Error... Try Again"), USB_UART_PORT, 1, 1, 0);
+      }
+    } while (1);
+    // Set operational parameter in EEPROM
+    EEPROM.write(ADDR_CO2SEL, co2sel);
+  }
+
+  if ((SPOD == deviceType) || (co2sel == ONLY_VOC_SELECTED) || (co2sel == CO2_VOC_SELECTED)) {
+    uint8_t numofPID = 1;
+    if ((echemnum == 0) || (SPOD == deviceType)) {
+      SerialPrint(F("Enter Number of VOCs "), USB_UART_PORT, 0, 0, 0);
+      if (SPOD == deviceType) {
+        SerialPrint(F("0,"), USB_UART_PORT, 0, 0, 0);
+      }
+      SerialPrint(F("1 or 2"), USB_UART_PORT, 1, 1, 0);
+      SerialDelay(USB_UART_PORT, 300);
+      numofPID = SerialRead(USB_UART_PORT, '\n', 1, 1).toInt();
+    } else {
+      SerialPrint(F("1 VOC Selected"), USB_UART_PORT, 1, 0, 0);
+    }
+    SetNumOfVOCs(numofPID);
+    /*if (1 == numofPID) {
+      pid1en = 1;
+      pid2en = 0;
+      EEPROM.update(ADDR_PID1_EN, pid1en);
+      EEPROM.update(ADDR_PID2_EN, pid2en);
+      SerialPrint(F("VOC1 Enabled"), USB_UART_PORT, 1, 0, 0);
+      } else if (2 == numofPID) {
+      pid1en = 1;
+      pid2en = 1;
+      EEPROM.update(ADDR_PID1_EN, pid1en);
+      EEPROM.update(ADDR_PID2_EN, pid2en);
+      SerialPrint(F("VOC1 & VOC2 are Enabled"), USB_UART_PORT, 1, 0, 0);
+      } else if ((0 == numofPID) && (SPOD == deviceType)) {
+      pid1en = 0;
+      pid2en = 0;
+      EEPROM.update(ADDR_PID1_EN, pid1en);
+      EEPROM.update(ADDR_PID2_EN, pid2en);
+      } else {
+      SerialPrint(F("Invalid Input!...Default state of both VOCs Disabled"), USB_UART_PORT, 1, 0, 0);
+      pid1en = 0;
+      pid2en = 0;
+      EEPROM.update(ADDR_PID1_EN, pid1en);
+      EEPROM.update(ADDR_PID2_EN, pid2en);
+      }*/
+  }  // end of if ((SPOD == deviceType) || (co2sel == ONLY_VOC_SELECTED) || (co2sel == CO2_VOC_SELECTED))
+
+  SerialPrint(F("Select Anemometer Type, ANALOG, DIGITAL, or NONE"), USB_UART_PORT, 1, 1, 0);
+  SerialDelay(USB_UART_PORT, 300);
+  String response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+  response.toUpperCase();
+  if (response.indexOf(F("NONE")) > -1) {
+    SerialPrint(F("No Anemometer Selected"), USB_UART_PORT, 1, 1, 0);
+    meten = MET_DISABLED;
+  } else if (response.indexOf(F("ANALOG")) > -1) {
+    SerialPrint(F("ANALOG Selected, Connect Exterior Port to Analog Anemometer Port"), USB_UART_PORT, 1, 1, 0);
+    meten = MET_ANALOG;
+  } else if (response.indexOf(F("DIGITAL")) > -1) {
+    SerialPrint(F("Digital Selected, Connect Exterior Port to Digital Anemometer Port"), USB_UART_PORT, 1, 1, 0);
+    meten = MET_DIGITAL;
+  } else {
+    SerialPrint(F("Invalid input! Anemometer Disabled"), USB_UART_PORT, 1, 1, 0);
+    meten = MET_DISABLED;
+  }
+  EEPROM.write(ADDR_METEN, meten);
+
+  analogReference(DEFAULT);  // Set Analog Reference to 3.3V Vcc
+
+  // Set factory default URL & apn
+  serv_adrs = F("http://18.222.146.48/SENSIT/TEST/v1/data/ramp_add.php");
+  apn = F("zipitwireless.com.attz");
+
+  char cbuff[serv_adrs.length() + 1];
+  serv_adrs.toCharArray(cbuff, serv_adrs.length() + 1);
+  EEPROM.write(ADDR_URL, serv_adrs.length());
+
+  for (uint8_t i = 0; i < serv_adrs.length(); i++) {
+    uint8_t val = byte(cbuff[i]) ^ byte(i);
+    EEPROM.write(ADDR_URL + 1 + i, val);
+  }
+
+  cbuff[apn.length() + 1];
+  apn.toCharArray(cbuff, apn.length() + 1);
+  EEPROM.write(ADDR_APN, apn.length());
+
+  for (uint8_t i = 0; i < apn.length(); i++) {
+    uint8_t val = byte(cbuff[i]) ^ byte(i);
+    EEPROM.write(ADDR_APN + 1 + i, val);
+  }
+
+  gsm_power_toggle();
+  SerialClear(USB_UART_PORT, 1);
+  SerialPrint(F("Factory Config Complete...Hit Enter to Exit"), USB_UART_PORT, 1, 1, 0);
+  gsm_comm_check(0);
+  if (0 == commstat) {
+    gsm_comm_check(0);
+  }
+
+  if (1 == commstat) {
+    SerialPrint(F("Setting Network Parameters"), USB_UART_PORT, 1, 1, 0);
+    debug = 1;
+    cellconfig(0);
+    debug = 0;
+  }
+
+  do {
+    //Jacob 07132022 Measure not working correctly in factory as power is shared with switch LED
+    delay(10);
+    curr_chrg = get_Battery_Current(CURRENT_IN);
+    curr_run = get_Battery_Current(CURRENT_OUT);
+    output = F("RUN: ");
+    output += curr_run;
+    output += F(" CHRG: ");
+    output += curr_chrg;
+    SerialPrint(output, USB_UART_PORT, 0, 0, 0);
+    String gsmResponse = "";
+    if (1 == commstat) {
+      SerialPrint("  ", USB_UART_PORT, 0, 0, 0);
+      gsmResponse = sendATcommand(0, F("AT+CSQ"), 5, F("OK"));
+      gsmResponse = gsmResponse.substring(gsmResponse.indexOf(":") - 3, gsmResponse.indexOf(F("OK")));
+      gsmResponse.trim();
+      SerialPrint(gsmResponse, USB_UART_PORT, 0, 0, 0);
+      SerialPrint(F(" CREG Status: "), USB_UART_PORT, 0, 0, 0);
+      gsmResponse = sendATcommand(0, F("AT+CREG?"), 5, F("OK"));
+      gsmResponse = gsmResponse.substring(gsmResponse.indexOf(",") + 1, gsmResponse.indexOf(F("OK")));
+      gsmResponse.trim();
+      SerialPrint(gsmResponse, USB_UART_PORT, 1, 0, 0);
+    } else {
+      SerialPrint("", USB_UART_PORT, 1, 0, 0);
+    }
+    delay(950);
+  } while (Serial.available() == 0);
+  init_gpios();
+}  // end of factory_settings()
+
+/**
+  @brief  Function for SenseAir CO2 calibration by known gas concentration.
+*/
+void SenseAirCalibration() {
+  uint32_t calibrationTimeout = 25000;  // 25 sec
+  bool timeOut = false;
+  uint32_t current_time = millis();
+  while (!Serial.available()) {
+    if ((millis() - current_time) > calibrationTimeout) {
+      timeOut = true;
+      break;
+    }
+  }
+  if (!timeOut) {
+    String cal_data = Serial.readString();
+    uint16_t calibrationValue = cal_data.toInt();
+    if ((calibrationValue <= 2000) && (calibrationValue >= 400)) {
+      uint8_t calData[2] = { 0x00, 0x00 };
+      calData[0] = calibrationValue >> 8;
+      calData[1] = calibrationValue & 0xFF;
+
+      /*Clearing register Calibration Status (0x81)*/
+
+      byte i2c_response = I2c.write(SENSEAIR_SENSOR_ADDRESS, (uint8_t)0x81, (uint8_t)0x00);
+      //Wire.beginTransmission(SENSEAIR_SENSOR_ADDRESS);
+      //Wire.write(0x81);
+      //Wire.write(0x00);
+      if (i2c_response != 0) {
+        SerialPrint(F("1...Error"), USB_UART_PORT, 1, 0, 0);
+      }
+
+      /*Write calibration target 500 to register Calibration Target (0x84)*/
+      i2c_response = I2c.write(SENSEAIR_SENSOR_ADDRESS, 0x84, calData, 2);
+      //Wire.beginTransmission(SENSEAIR_SENSOR_ADDRESS);
+      //Wire.write(0x84);
+      //Wire.write(calData[0]);
+      //Wire.write(calData[1]);
+      if (i2c_response != 0) {
+        SerialPrint(F("2...Error!"), USB_UART_PORT, 1, 0, 0);
+      }
+
+      /*calibration command (0x7C05) to register Calibration Command (0x82)*/
+      calData[0] = 0x7c;
+      calData[1] = 0x05;
+      i2c_response = I2c.write(SENSEAIR_SENSOR_ADDRESS, 0x82, calData, 2);
+      //Wire.beginTransmission(SENSEAIR_SENSOR_ADDRESS);
+      //Wire.write(0x82);
+      //Wire.write(0x7c);
+      //Wire.write(0x05);
+      if (i2c_response != 0) {
+        SerialPrint(F("3...Error!"), USB_UART_PORT, 1, 0, 0);
+      }
+      SerialPrint(F("SenseAir Calibration Complete..."), USB_UART_PORT, 1, 0, 0);
+    }
+  }
+}
+
+/**
+  @brief  Function for cellular settings.
+*/
+void cellular_settings() {
+  uint8_t access = 0;
+  if (0 == setpass) {
+    access = 1;
+  } else if (1 == setpass) {
+    if (1 == confirmpass()) {
+      access = 1;
+    }
+  }
+  if (1 == access) {
+    String cellular_response = "";
+    do {
+#if (USE_CUSTOM_HEADER_ENABLE == true)
+      SerialPrint(F("Type APN, BAND, CREDENTIALS, HEADER, HOST, NETWORK, PROTOCOL, RATIO, SIGNAL, TLS, TOPICS or EXIT"), USB_UART_PORT, 1, 1, 0);
+#else
+      SerialPrint(F("Type APN, BAND, CREDENTIALS, HOST, NETWORK, PROTOCOL, RATIO, SIGNAL, TLS, TOPICS or EXIT"), USB_UART_PORT, 1, 1, 0);
+#endif
+      SerialDelay(USB_UART_PORT, 300);
+      cellular_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+      SerialPrint(F("Command Received: "), USB_UART_PORT, 0, 0, 0);
+      SerialPrint(cellular_response, USB_UART_PORT, 1, 1, 0);
+      if (cellular_response.indexOf(F("INITCELL")) > -1) {
+        initmodem(1, 0);
+      }
+      if (cellular_response.indexOf(F("BAND")) > -1) {
+        do {
+          /* BANDSCAN and BANDSEL are not used. Could be removed in future */
+          SerialPrint(F("Type BANDSEL, CARRIER, ROAMING, or EXIT"), USB_UART_PORT, 1, 1, 0);
+          SerialDelay(USB_UART_PORT, 300);
+          cellular_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+          if (cellular_response.indexOf(F("ROAMING")) > -1) {
+
+            SerialPrint(F("Type AUTO, ENABLE, or DISABLE"), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 300);
+            cellular_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+            if (cellular_response.indexOf(F("DISABLE")) > -1) {
+              roaming = ROAMING_OFF;
+              SerialPrint(F("Roaming Disabled"), USB_UART_PORT, 1, 1, 0);
+            } else if (cellular_response.indexOf(F("AUTO")) > -1) {
+              roaming = ROAMING_AUTO;
+              SerialPrint(F("Roaming Automatic"), USB_UART_PORT, 1, 1, 0);
+            } else if (cellular_response.indexOf(F("ENABLE")) > -1) {
+              roaming = ROAMING_ON;
+              SerialPrint(F("Roaming Enable"), USB_UART_PORT, 1, 1, 0);
+            }
+            upgrade = 1;
+            EEPROM.write(ADDR_UPGRDFLAG, upgrade);
+            EEPROM.update(ADDR_ROAM, roaming);
+          } else if (cellular_response.indexOf(F("BANDSEL")) > -1) {
+            SerialPrint(F("WARNING!! Apply Custom Band Selection? (YES)"), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 300);
+            cellular_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+            if (cellular_response.indexOf(F("YES")) > -1) {
+              String bandstr[3] = {};
+              String bandtype[3] = { F("2G/3G"), F("CATM1/LTE"), F("NBIOT/TDS") };
+
+              for (uint8_t i = 0; i < 3; i++) {
+                SerialPrint(F("Set Band Value, 0 = unchanged: "), USB_UART_PORT, 0, 0, 0);
+                SerialPrint(bandtype[i], USB_UART_PORT, 0, 0, 0);
+                SerialDelay(USB_UART_PORT, 300);
+                bandstr[i] = SerialRead(USB_UART_PORT, '\n', 1, 1);
+              }
+              String custombandStr = F("");
+              custombandStr += bandstr[0];
+              custombandStr += F(",");
+              custombandStr += bandstr[1];
+              custombandStr += F(",");
+              custombandStr += bandstr[2];
+
+              gsm_comm_check(0);
+              if (1 == commstat) {
+                if (set_customBand(custombandStr) == true) {
+                  carrier = CUSTOM;  //custom band selection
+                  EEPROM.write(ADDR_CARRIER, carrier);
+                  String bandcmd = F("AT+QCFG=\"band\",");
+                  /*bandcmd += bandstr[0];
+                          bandcmd += ",";
+                          bandcmd += bandstr[1];
+                          bandcmd += ",";
+                          bandcmd += bandstr[2];*/
+                  bandcmd += customband;
+                  bandcmd += ",1";
+                  sendATcommand(0, bandcmd, 2, F("OK"));
+                  sendATcommand(0, F("AT+QPOWD"), 2, F("OK"));
+                }
+              }
+              delay(2000);
+              GSM_STATUS = GSM_TURN_OFF;
+              digitalWrite(GSM_POW_EN, LOW);
+            }
+          } else if (cellular_response.indexOf(F("CARRIER")) > -1) {
+            SerialPrint(F("Type 'AUTO', 'ATT', 'VZW', 'TMO'"), USB_UART_PORT, 1, 1, 0);
+            SerialDelay(USB_UART_PORT, 10);
+            cellular_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+            if (cellular_response.indexOf(F("AUTO")) > -1) {
+              carrier = AUTO;
+              SerialPrint(F("AUTO Mode Selected"), USB_UART_PORT, 1, 1, 0);
+              EEPROM.write(ADDR_CARRIER, carrier);
+            } else if (cellular_response.indexOf(F("ATT")) > -1) {
+              carrier = ATnT;
+              SerialPrint(F("AT&T Selected"), USB_UART_PORT, 1, 1, 0);
+              EEPROM.write(ADDR_CARRIER, carrier);
+            } else if (cellular_response.indexOf(F("VZW")) > -1) {
+              carrier = VERIZON;
+              SerialPrint(F("Verizon Selected"), USB_UART_PORT, 1, 1, 0);
+              EEPROM.write(ADDR_CARRIER, carrier);
+            } else if (cellular_response.indexOf(F("TMO")) > -1) {
+              carrier = TMOBILE;
+              SerialPrint(F("T-Mobile Selected"), USB_UART_PORT, 1, 1, 0);
+              EEPROM.write(ADDR_CARRIER, carrier);
+            } else {
+              SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+            }
+            // upgrade = 1;
+            // EEPROM.write(ADDR_UPGRDFLAG, upgrade);
+          }
+        } while (cellular_response.indexOf(F("EXIT")) == -1);
+        cellular_response = "";
+      }
+
+      if (cellular_response.indexOf(F("NETWORK")) > -1) {
+        SerialPrint(F("Type 'AUTO','GPRS','CATM1','NBIOT','LTE', or 'GLOBAL'"), USB_UART_PORT, 1, 1, 0);
+        SerialDelay(USB_UART_PORT, 10);
+        cellular_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+        if (cellular_response.indexOf(F("AUTO")) > -1) {
+          cellmode = AUTO;
+          SerialPrint(F("AUTO Mode Selected"), USB_UART_PORT, 1, 1, 0);
+          EEPROM.write(ADDR_CELLMODE, cellmode);
+        } else if (cellular_response.indexOf(F("GPRS")) > -1) {
+          cellmode = GPRS_2G;
+          SerialPrint(F("GPRS Mode Selected"), USB_UART_PORT, 1, 1, 0);
+          EEPROM.write(ADDR_CELLMODE, cellmode);
+        } else if (cellular_response.indexOf(F("CATM1")) > -1) {
+          cellmode = CATM1;
+          SerialPrint(F("CATM1 Mode Selected"), USB_UART_PORT, 1, 1, 0);
+          EEPROM.write(ADDR_CELLMODE, cellmode);
+        } else if (cellular_response.indexOf(F("NBIOT")) > -1) {
+          cellmode = NBIOT;
+          SerialPrint(F("NBIOT Mode Selected"), USB_UART_PORT, 1, 1, 0);
+          EEPROM.write(ADDR_CELLMODE, cellmode);
+        } else if (cellular_response.indexOf(F("GLOBAL")) > -1) {
+          cellmode = GLOBAL;
+          SerialPrint(F("Global Mode Selected"), USB_UART_PORT, 1, 1, 0);
+          EEPROM.write(ADDR_CELLMODE, cellmode);
+        } else if (cellular_response.indexOf(F("LTE")) > -1) {
+          cellmode = LTE_ONLY;
+          SerialPrint(F("LTE Only Mode Selected"), USB_UART_PORT, 1, 1, 0);
+          EEPROM.write(ADDR_CELLMODE, cellmode);
+        } else {
+          SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+        }
+        // upgrade = 1;
+        // EEPROM.update(ADDR_UPGRDFLAG, upgrade);
+        bIssettingUpdateRequired = 1;
+        cellular_response = "";
+      }
+
+      if (cellular_response.indexOf(F("TOPICS")) > -1) {
+        SerialPrint(F("Type PUBLISH, SUBSCRIBE, or EXIT"), USB_UART_PORT, 1, 1, 0);
+
+        SerialDelay(USB_UART_PORT, 300);
+
+        cellular_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+        SerialPrint(F("Command Received: "), USB_UART_PORT, 0, 0, 0);
+        SerialPrint(cellular_response, USB_UART_PORT, 1, 1, 0);
+
+        if (cellular_response.indexOf(F("PUBLISH")) > -1) {
+          SerialPrint(F("Type topic for publish (99 character max)"), USB_UART_PORT, 1, 1, 0);
+          SerialDelay(USB_UART_PORT, 300);
+          cellular_response = SerialRead(USB_UART_PORT, '\n', 1, 0);
+          SerialPrint(F("Publish Topic Received: "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(cellular_response, USB_UART_PORT, 1, 1, 0);
+          set_pubTopic(cellular_response);
+        } else if (cellular_response.indexOf(F("SUBSCRIBE")) > -1) {
+          SerialPrint(F("Type Topic for Subscribe (99 character max)"), USB_UART_PORT, 1, 1, 0);
+          SerialDelay(USB_UART_PORT, 300);
+          cellular_response = SerialRead(USB_UART_PORT, '\n', 1, 0);
+
+          SerialPrint(F("Subscribe Topic Received: "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(cellular_response, USB_UART_PORT, 1, 1, 0);
+          set_subTopic(cellular_response);
+        }
+        cellular_response = "";
+      }
+
+      if (cellular_response.indexOf(F("TLS")) > -1) {
+
+        SerialPrint(F("Type DISABLE, ENABLE, or EXIT"), USB_UART_PORT, 1, 1, 0);
+        SerialDelay(USB_UART_PORT, 300);
+        cellular_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+        SerialPrint(F("Command Received: "), USB_UART_PORT, 0, 0, 0);
+        SerialPrint(cellular_response, USB_UART_PORT, 1, 1, 0);
+
+        if (cellular_response.indexOf(F("DISABLE")) > -1) {
+          sslmode = TLS_DISABLED;
+          EEPROM.write(ADDR_SSLMODE, sslmode);
+          SerialPrint(F("TLS Disabled"), USB_UART_PORT, 1, 1, 0);
+
+        } else if (cellular_response.indexOf(F("ENABLE")) > -1) {
+          //Jacob 07132022 Removing need for certificate to avoid expiration issues. Adds little security
+          sslmode = TLS_ENABLED;
+          EEPROM.write(ADDR_SSLMODE, sslmode);
+          SerialPrint(F("TLS Enabled"), USB_UART_PORT, 1, 1, 0);
+
+        } else if (cellular_response.indexOf(F("EXIT")) > -1) {
+          SerialPrint(F("Exiting TLS Options"), USB_UART_PORT, 1, 1, 0);
+        } else {
+          SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+        }
+        bIssettingUpdateRequired = 1;
+        cellular_response = "";
+      }
+
+      if (cellular_response.indexOf(F("CREDENTIALS")) > -1) {
+
+        SerialPrint(F("Type USERPASS or AZUREHUB"), USB_UART_PORT, 1, 1, 0);
+        SerialDelay(USB_UART_PORT, 300);
+        cellular_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+        if (cellular_response.indexOf(F("USERPASS")) > -1) {
+          SerialPrint(F("Type Username (99 character max)"), USB_UART_PORT, 1, 1, 0);
+          SerialDelay(USB_UART_PORT, 300);
+          cellular_response = SerialRead(USB_UART_PORT, '\n', 1, 0);
+
+          SerialPrint(F("Username Confirmation: "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(cellular_response, USB_UART_PORT, 1, 1, 0);
+
+          if ((cellular_response.length() < 100) && (cellular_response.length() > 0)) {
+            char cbuff[cellular_response.length() + 1];
+            cellular_response.toCharArray(cbuff, cellular_response.length() + 1);
+            EEPROM.write(ADDR_USER, cellular_response.length());
+
+            for (uint8_t i = 0; i < cellular_response.length(); i++) {
+              uint8_t val = byte(cbuff[i]) ^ byte(i);
+              EEPROM.write(ADDR_USER + 1 + i, val);
+            }
+          } else {
+            SerialPrint(F("Username Not Valid"), USB_UART_PORT, 1, 1, 0);
+          }
+          SerialPrint(F("Type Password (249 character max)"), USB_UART_PORT, 1, 1, 0);
+          SerialDelay(USB_UART_PORT, 300);
+          cellular_response = SerialRead(USB_UART_PORT, '\n', 1, 0);
+
+          if (cellular_response.indexOf(F("SharedAccessSignature=SharedAccessSignature")) == 0) {
+            cellular_response = cellular_response.substring(cellular_response.indexOf("=") + 1);
+          }
+
+          SerialPrint(F("Password Confirmation: "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(cellular_response, USB_UART_PORT, 1, 1, 0);
+
+          if ((cellular_response.length() < 250) && (cellular_response.length() > 0)) {
+            char cbuff[cellular_response.length() + 1];
+            cellular_response.toCharArray(cbuff, cellular_response.length() + 1);
+            EEPROM.write(ADDR_PASS, cellular_response.length());
+            for (uint8_t i = 0; i < cellular_response.length(); i++) {
+              uint8_t val = byte(cbuff[i]) ^ byte(i);
+              EEPROM.write(ADDR_PASS + 1 + i, val);
+            }
+          } else {
+            SerialPrint(F("Password Not Valid"), USB_UART_PORT, 1, 1, 0);
+          }
+        } else if (cellular_response.indexOf(F("AZUREHUB")) > -1) {
+          uint8_t tokensuccess = 0;
+          SerialPrint(F("Send SAS Token "), USB_UART_PORT, 1, 1, 0);
+
+          do {
+            SerialDelay(USB_UART_PORT, 300);
+            cellular_response = SerialRead(USB_UART_PORT, '\n', 1, 0);
+
+            if (cellular_response.indexOf(F("SharedAccessSignature=SharedAccessSignature")) == 0) {
+              cellular_response = cellular_response.substring(cellular_response.indexOf("=") + 1);
+            }
+
+            if ((cellular_response.indexOf(F("SharedAccessSignature s")) == 0) && (cellular_response.indexOf(F("sig=")) > -1) && (cellular_response.indexOf(F("se=")) > -1)) {
+
+              if (cellular_response.indexOf(address) > -1) {
+                SerialPrint(F("Token Confirmation: "), USB_UART_PORT, 0, 0, 0);
+                SerialPrint(cellular_response, USB_UART_PORT, 1, 1, 0);
+
+                if ((cellular_response.length() < 250) && (cellular_response.length() > 0)) {
+                  tokensuccess = 1;
+                  char cbuff[cellular_response.length() + 1];
+                  cellular_response.toCharArray(cbuff, cellular_response.length() + 1);
+                  EEPROM.write(ADDR_PASS, cellular_response.length());
+
+                  for (uint8_t i = 0; i < cellular_response.length(); i++) {
+                    uint8_t val = byte(cbuff[i]) ^ byte(i);
+                    EEPROM.write(ADDR_PASS + 1 + i, val);
+                  }
+
+                  serv_adrs = cellular_response.substring(cellular_response.indexOf(F("sr=")) + 3, cellular_response.indexOf(F("%2Fdevices")));
+                  serv_adrs.trim();
+
+                  SerialPrint(F("Host Address Confirmation: "), USB_UART_PORT, 0, 0, 0);
+                  SerialPrint(serv_adrs, USB_UART_PORT, 1, 1, 0);
+
+                  if ((serv_adrs.length() < 199) && (serv_adrs.length() > 10)) {
+                    char cbuff[serv_adrs.length() + 1];
+                    serv_adrs.toCharArray(cbuff, serv_adrs.length() + 1);
+                    EEPROM.write(ADDR_URL, serv_adrs.length());
+                    for (uint8_t i = 0; i < serv_adrs.length(); i++) {
+                      uint8_t val = byte(cbuff[i]) ^ byte(i);
+                      EEPROM.write(ADDR_URL + 1 + i, val);
+                    }
+                  }
+
+                  cellular_response = serv_adrs;
+                  cellular_response += "/";
+                  cellular_response += address;
+                  SerialPrint(F("Username Confirmation: "), USB_UART_PORT, 0, 0, 0);
+                  SerialPrint(cellular_response, USB_UART_PORT, 1, 1, 0);
+
+                  if ((cellular_response.length() < 100) && (cellular_response.length() > 0)) {
+                    char cbuff[cellular_response.length() + 1];
+                    cellular_response.toCharArray(cbuff, cellular_response.length() + 1);
+                    EEPROM.write(ADDR_USER, cellular_response.length());
+                    for (uint8_t i = 0; i < cellular_response.length(); i++) {
+                      uint8_t val = byte(cbuff[i]) ^ byte(i);
+                      EEPROM.write(ADDR_USER + 1 + i, val);
+                    }
+                  }
+                  cellular_response = F("devices/");
+                  cellular_response += address;
+                  cellular_response += F("/messages/events/");
+                  SerialPrint(F("Publish Topic Confirmation: "), USB_UART_PORT, 0, 0, 0);
+                  SerialPrint(cellular_response, USB_UART_PORT, 1, 1, 0);
+                  if ((cellular_response.length() < 100) && (cellular_response.length() > 0)) {
+                    char cbuff[cellular_response.length() + 1];
+                    cellular_response.toCharArray(cbuff, cellular_response.length() + 1);
+                    EEPROM.write(ADDR_PUB, cellular_response.length());
+                    for (uint8_t i = 0; i < cellular_response.length(); i++) {
+                      uint8_t val = byte(cbuff[i]) ^ byte(i);
+                      EEPROM.write(ADDR_PUB + 1 + i, val);
+                    }
+                  }
+                } else {
+                  SerialPrint(F("Maximum Token Length Exceeded, Try Again"), USB_UART_PORT, 1, 1, 0);
+                }
+              } else {
+                SerialPrint(F("Device ID Incorrect, Try Again"), USB_UART_PORT, 1, 1, 0);
+              }
+            } else {
+              SerialPrint(F("Incorrect Token Format, Try Again"), USB_UART_PORT, 1, 1, 0);
+            }
+          } while (0 == tokensuccess);
+        } else {
+          SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+        }
+        cellular_response = "";
+      }
+
+#if (USE_CUSTOM_HEADER_ENABLE == true)
+      if (cellular_response.indexOf("HEADER") > -1) {
+        SerialPrint(F("Type ENABLE, DISABLE or KEY"), USB_UART_PORT, 1, 1, 0);
+        SerialDelay(USB_UART_PORT, 300);
+        cellular_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+        if (cellular_response.indexOf(F("ENABLE")) > -1) {
+          enable_httpsCustomHeader = true;
+          SerialPrint(F("Custom Header Enabled, Set Starting Key"), USB_UART_PORT, 1, 1, 0);
+          EEPROM.write(ADDR_CUSTOM_HEADER, enable_httpsCustomHeader);
+          goto SET_KEY;
+        } else if (cellular_response.indexOf(F("DISABLE")) > -1) {
+          enable_httpsCustomHeader = false;
+          SerialPrint(F("Custom Header Disabled"), USB_UART_PORT, 1, 1, 0);
+          EEPROM.write(ADDR_CUSTOM_HEADER, enable_httpsCustomHeader);
+        } else if (cellular_response.indexOf(F("KEY")) > -1) {
+SET_KEY:
+          SerialPrint(F("Type Starting Key, 49 characters MAX"), USB_UART_PORT, 1, 1, 0);
+          SerialDelay(USB_UART_PORT, 300);
+          key[0] = SerialRead(USB_UART_PORT, '\n', 1, 0);
+          SerialPrint(F("Key Confirmation: "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(key[0], USB_UART_PORT, 1, 1, 0);
+
+          if (key[0].length() < 50 && key[0].length() > 0) {
+            //valid key size
+            char cbuff[key[0].length() + 1];
+            key[0].toCharArray(cbuff, key[0].length() + 1);
+            EEPROM.write(ADDR_KEY[0], key[0].length());
+            for (uint16_t i = 0; i < key[0].length(); i++) {
+              EEPROM.write(ADDR_KEY[0] + 1 + i, byte(cbuff[i]));
+            }
+            EEPROM.write(ADDR_KEY[1], 0);  //Reset other secondary keeysdis
+            EEPROM.write(ADDR_KEY[2], 0);
+          } else {
+            SerialPrint(F("Key Not Valid"), USB_UART_PORT, 1, 1, 0);
+          }
+        } else {
+          SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+        }
+        cellular_response = "";
+      }
+#endif
+
+      if (cellular_response.indexOf(F("PROTOCOL")) > -1) {
+
+        SerialPrint(F("Type HTTP, MQTT, or PERIODIC"), USB_UART_PORT, 1, 1, 0);
+        SerialDelay(USB_UART_PORT, 300);
+        cellular_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+        if (cellular_response.indexOf(F("MQTT")) > -1) {
+          SerialPrint(F("MQTT Protocol Selected"), USB_UART_PORT, 1, 1, 0);
+          protocol = MQTT_PROTOCOL;
+          EEPROM.update(ADDR_PROTOCOL, protocol);
+          SerialPrint(F("Select MQTT v3.1 (3) or MQTT v3.1.1 (4)"), USB_UART_PORT, 1, 1, 0);
+          SerialDelay(USB_UART_PORT, 300);
+          int16_t mvers = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+          if ((3 == mvers) || (4 == mvers)) {
+            SerialPrint(F("MQTT Version Selected: "), USB_UART_PORT, 0, 0, 0);
+            if ((3 == mvers)) {
+              mqttv = (uint8_t)mvers;
+              SerialPrint(F("v3.1"), USB_UART_PORT, 1, 1, 0);
+            }
+            if (mvers == 4) {
+              mqttv = (uint8_t)mvers;
+              SerialPrint(F("v3.1.1"), USB_UART_PORT, 1, 1, 0);
+            }
+            EEPROM.write(ADDR_MQTTVERSION, mqttv);
+          } else {
+            SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+          }
+        } else if (cellular_response.indexOf(F("HTTP")) > -1) {
+          SerialPrint(F("HTTP Protocol Selected"), USB_UART_PORT, 1, 1, 0);
+          protocol = HTTP_CONTINUOUS;
+          EEPROM.update(ADDR_PROTOCOL, protocol);
+        } else if (cellular_response.indexOf(F("PERIODIC")) > -1) {
+          SerialPrint(F("Periodic HTTP Protocol Selected"), USB_UART_PORT, 1, 1, 0);
+          protocol = HTTP_BUFFERED;
+          if ((gpsmode > SINGLE) && ((data_delay * ratio) >= 600)) {
+            gpsmode = SINGLE;
+            EEPROM.update(ADDR_GPSMODE, gpsmode);
+            bIssettingUpdateRequired = 1;
+          }
+          EEPROM.update(ADDR_PROTOCOL, protocol);
+        } else {
+          SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+        }
+        bIssettingUpdateRequired = 1;
+        cellular_response = "";
+      }
+
+      if (cellular_response.indexOf(F("ATMODE")) > -1) {
+        uint8_t debugtemp = debug;
+        debug = 1;
+        SerialPrint(F("GSM Power On"), USB_UART_PORT, 1, 1, 0);
+        digitalWrite(GSM_POW_EN, HIGH);
+        delay(500);
+        gsm_power_toggle();
+        delay(5000);
+
+        SerialClear(USB_UART_PORT, 1);
+        SerialPrint(F("Type EXIT to end AT mode"), USB_UART_PORT, 1, 1, 0);
+
+        do {
+          cellular_response = SerialRead(USB_UART_PORT, '\n', 1, 0);
+          if (cellular_response.length() > 0) {
+
+            if (cellular_response.indexOf(F("EXIT")) == -1) {
+              if (cellular_response.indexOf(F("DTR:")) > -1) {
+                uint8_t state = cellular_response.substring(cellular_response.indexOf(':') + 1).toInt();
+                if (state > 1) {
+                  state = 1;
+                }
+                digitalWrite(GSM_DTR, state);
+              } else if (cellular_response.indexOf(F("BAUD:")) > -1) {
+                int32_t baudrate = cellular_response.substring(cellular_response.indexOf(':') + 1).toInt();
+                sendATcommand(0, "AT+IPR=" + String(baudrate) + ";&W", 5, F("OK"));
+                SerialPower(GSMCOMM_PORT, HIGH, baudrate);
+              } else if (cellular_response.indexOf(F("CURR:")) > -1) {
+
+                SerialPrint(String(get_Battery_Current(CURRENT_OUT)), USB_UART_PORT, 1, 0, 0);
+              } else if (cellular_response.indexOf(F("RST:")) > -1) {
+
+              } else if (cellular_response.indexOf(F("UART:")) > -1) {
+                uint8_t tempstate = cellular_response.substring(cellular_response.indexOf(':') + 1).toInt();
+                if (tempstate >= 1) {
+                  SerialPrint(F("UART ON"), USB_UART_PORT, 1, 0, 0);
+                  SerialPower(GSMCOMM_PORT, HIGH, fixbaud[GSMCOMM_PORT]);
+                } else {
+                  SerialPrint(F("UART OFF"), USB_UART_PORT, 1, 0, 0);
+                  SerialPower(GSMCOMM_PORT, LOW, fixbaud[GSMCOMM_PORT]);
+                }
+              } else {
+                SerialPrint(cellular_response, GSMCOMM_PORT, 1, 0, 0);
+              }
+            } else {
+              sendATcommand(0, F("AT+QPOWD"), 10, F("POWERED DOWN"));
+              break;
+            }
+          }
+
+          cellular_response = SerialRead(GSMCOMM_PORT, '\n', 1, 0);
+          if (cellular_response.length() > 0) {
+            SerialPrint(cellular_response, USB_UART_PORT, 1, 0, 0);
+          }
+        } while (cellular_response.indexOf(F("EXIT")) == -1);
+
+        digitalWrite(GSM_DTR, LOW);
+        delay(1000);
+        GSM_STATUS = GSM_TURN_OFF;
+        digitalWrite(GSM_POW_EN, LOW);
+        debug = debugtemp;
+        cellular_response = "";
+      }
+
+      if (cellular_response.indexOf(F("APN")) > -1) {
+        SerialPrint(F("Type APN, 30 Characters Max"), USB_UART_PORT, 1, 1, 0);
+        SerialDelay(USB_UART_PORT, 300);
+        apn = SerialRead(USB_UART_PORT, '\n', 1, 0);
+        SerialPrint(F("APN Confirmation: "), USB_UART_PORT, 0, 0, 0);
+        SerialPrint(apn, USB_UART_PORT, 1, 1, 0);
+        set_apn(apn);
+        bIssettingUpdateRequired = 1;
+        cellular_response = "";
+      }
+
+      if (cellular_response.indexOf(F("HOST")) > -1) {
+        SerialPrint(F("Type Host Address, 199 Characters Max"), USB_UART_PORT, 1, 1, 0);
+        SerialDelay(USB_UART_PORT, 300);
+
+        serv_adrs = SerialRead(USB_UART_PORT, '\n', 1, 0);
+
+        SerialPrint(F("Host Address Confirmation: "), USB_UART_PORT, 0, 0, 0);
+        SerialPrint(serv_adrs, USB_UART_PORT, 1, 1, 0);
+
+        if ((serv_adrs.length() < 199) && (serv_adrs.length() > 10)) {
+          char cbuff[serv_adrs.length() + 1];
+          serv_adrs.toCharArray(cbuff, serv_adrs.length() + 1);
+          EEPROM.write(ADDR_URL, serv_adrs.length());
+          for (uint16_t i = 0; i < serv_adrs.length(); i++) {
+            uint8_t val = byte(cbuff[i]) ^ byte(i);
+            EEPROM.write(ADDR_URL + 1 + i, val);
+          }
+          bIssettingUpdateRequired = 1;
+        } else {
+          SerialPrint(F("Address Not Valid"), USB_UART_PORT, 1, 1, 0);
+        }
+        cellular_response = "";
+      }
+
+      if (cellular_response.indexOf(F("SIGNAL")) > -1) {
+        signal_settings();
+      }
+
+      if (cellular_response.indexOf(F("RATIO")) > -1) {
+        SerialPrint(F("Type GSM Output Ratio 1-300"), USB_UART_PORT, 1, 1, 0);
+        SerialClear(USB_UART_PORT, 1);
+        SerialDelay(USB_UART_PORT, 300);
+
+        uint16_t input = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+        set_ratio(input);
+        bIssettingUpdateRequired = 1;
+        cellular_response = "";
+      }
+    } while (cellular_response.indexOf(F("EXIT")) == -1);
+  }
+}
+
+
+/**
+  @brief Hidden menu option to set Fan speed.
+*/
+void SetFanControl() {
+  SerialPrint(F("Fan Speed Control, \nEnter option to set fan speed, \n Fan Off: 0%[1] \n 25%[2] \n 50%[3] \n 75%[4] \n 100%[5] "), USB_UART_PORT, 1, 1, 0);
+  SerialDelay(USB_UART_PORT, 300);
+  String user_input = SerialRead(USB_UART_PORT, '\n', 1, 1);
+  if ((user_input.toInt() <= 5) && (user_input.toInt() != 0)) {
+    switch (user_input.toInt()) {
+      case 1:
+        fan_speed = FAN_DUTY_CYCLE_0;
+        break;
+      case 2:
+        fan_speed = FAN_DUTY_CYCLE_25;
+        break;
+      case 3:
+        fan_speed = FAN_DUTY_CYCLE_50;
+        break;
+      case 4:
+        fan_speed = FAN_DUTY_CYCLE_75;
+        break;
+      case 5:
+        fan_speed = FAN_DUTY_CYCLE_100;
+        break;
+      default:
+        SerialPrint("Invalid input...FAN Speed 100% set", USB_UART_PORT, 1, 0, 0);
+    }
+    SerialPrint("Fan speed successfully changed.", USB_UART_PORT, 1, 0, 0);
+    EEPROM.write(ADDR_FANSPEED, fan_speed);
+  } else {
+    SerialPrint("Invalid Input or timeout!!!", USB_UART_PORT, 1, 0, 0);
+  }
+}
+
+/**
+  @brief  Function for output settings.
+*/
+void output_settings() {
+  String user_input = "";
+  do {
+    SerialPrint(F("Type 'DATATYPE, 'MODE', 'ODR', 'SD', or 'EXIT' "), USB_UART_PORT, 1, 1, 0);
+    SerialClear(USB_UART_PORT, 1);
+    SerialDelay(USB_UART_PORT, 300);
+
+    user_input = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+
+    if (user_input.indexOf(F("DATATYPE")) > -1) {
+      SerialPrint(F("Type JSON or CSV"), USB_UART_PORT, 1, 1, 0);
+      SerialDelay(USB_UART_PORT, 300);
+      user_input = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+      if (user_input.indexOf(F("CSV")) > -1) {
+        SerialPrint(F("CSV Selected"), USB_UART_PORT, 1, 1, 0);
+        datatype = CSV;
+        EEPROM.write(ADDR_DATATYPE, datatype);
+      } else if (user_input.indexOf(F("JSON")) > -1) {
+        SerialPrint(F("JSON Selected"), USB_UART_PORT, 1, 1, 0);
+        datatype = JSON;
+        EEPROM.write(ADDR_DATATYPE, datatype);
+      } else {
+        SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+      }
+    } else if (user_input.indexOf(F("SD")) > -1) {
+      SerialPrint(F("Type 'FORMAT'"), USB_UART_PORT, 1, 1, 0);
+      SerialClear(USB_UART_PORT, 1);
+      SerialDelay(USB_UART_PORT, 300);
+
+      user_input = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+      if (user_input.indexOf(F("FORMAT")) > -1) {
+        SerialPrint(F("WARNING! ALL DATA WILL BE LOST!! Type 'YES' to Confirm'"), USB_UART_PORT, 1, 1, 0);
+        SerialClear(USB_UART_PORT, 1);
+        SerialDelay(USB_UART_PORT, 300);
+
+        user_input = SerialRead(USB_UART_PORT, '\n', 1, 1);
+        if (user_input.indexOf(F("YES")) > -1) {
+          eraseCard();
+        } else {
+          SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+        }
+      }
+    }
+
+    else if (user_input.indexOf(F("ODR")) > -1) {
+      SerialPrint(F("Type Output Data Rate (10 - 120 seconds)"), USB_UART_PORT, 1, 1, 0);
+      SerialClear(USB_UART_PORT, 1);
+      SerialDelay(USB_UART_PORT, 300);
+      uint8_t input = SerialRead(USB_UART_PORT, '\n', 1, 0).toInt();
+      set_odr(input);
+      bIssettingUpdateRequired = 1;
+    } else if (user_input.indexOf(F("MODE")) > -1) {
+      String cellular_response = "";
+      SerialPrint(F("Type 'CELLULAR', 'USB'"), USB_UART_PORT, 1, 1, 0);
+      SerialClear(USB_UART_PORT, 1);
+      SerialDelay(USB_UART_PORT, 300);
+
+      user_input = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+      if (user_input.indexOf(F("USB")) > -1) {
+        SerialPrint(F("USB Mode Selected"), USB_UART_PORT, 1, 1, 0);
+        usbmode = MODE_USB;
+        if (gpsmode > DISABLED) {
+          gpsmode = DISABLED;
+          EEPROM.write(ADDR_GPSMODE, gpsmode);
+        }
+      } else if (user_input.indexOf(F("CELLULAR")) > -1) {
+        SerialPrint(F("Cellular Mode Selected"), USB_UART_PORT, 1, 1, 0);
+        usbmode = MODE_CELLULAR;
+      } else {
+        SerialPrint(F("Command Not Valid"), USB_UART_PORT, 1, 1, 0);
+      }
+      EEPROM.write(ADDR_USBMODE, usbmode);
+    } else if (user_input.indexOf(F("EXIT")) > -1) {
+
+    } else {
+      SerialPrint(F("Command Not Valid"), USB_UART_PORT, 1, 1, 0);
+    }
+
+  } while (user_input.indexOf(F("EXIT")) == -1);
+  bIssettingUpdateRequired = 1;
+}
+
+/**
+  @brief  Function for gps settings.
+*/
+void gps_settings() {
+  String gps_response = "";
+  SerialPrint(F("Type ENABLE or DISABLE"), USB_UART_PORT, 1, 1, 0);
+  SerialDelay(USB_UART_PORT, 300);
+
+  gps_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+  SerialPrint(F("Command Received: "), USB_UART_PORT, 0, 0, 0);
+  SerialPrint(gps_response, USB_UART_PORT, 1, 1, 0);
+  //Jacob 07122022 Allow GPS mode to be Constant/Interval for Periodic Mode
+  if (gps_response.indexOf(F("ENABLE")) > -1) {
+    if (MODE_USB == usbmode) {
+      gpsmode = SINGLE;
+      EEPROM.write(ADDR_GPSMODE, gpsmode);
+      SerialPrint(F("Single Mode Selected"), USB_UART_PORT, 1, 1, 0);
+    } else {
+      if ((HTTP_BUFFERED == protocol) && ((data_delay * ratio) >= 600)) {
+        gpsmode = SINGLE;
+        EEPROM.write(ADDR_GPSMODE, gpsmode);
+        SerialPrint(F("Single Mode Selected"), USB_UART_PORT, 1, 1, 0);
+      } else {
+        SerialPrint(F("Type CONSTANT, INTERVAL, or SINGLE"), USB_UART_PORT, 1, 1, 0);
+        SerialDelay(USB_UART_PORT, 300);
+        gps_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+        SerialPrint(F("Command Received: "), USB_UART_PORT, 0, 0, 0);
+        SerialPrint(gps_response, USB_UART_PORT, 1, 1, 0);
+
+        if (gps_response.indexOf(F("CONSTANT")) > -1) {
+          gpsmode = CONSTANT;
+          EEPROM.write(ADDR_GPSMODE, gpsmode);
+          SerialPrint(F("Constant Mode Selected"), USB_UART_PORT, 1, 1, 0);
+        } else if (gps_response.indexOf(F("INTERVAL")) > -1) {
+          gpsmode = INTERVAL;
+          EEPROM.write(ADDR_GPSMODE, gpsmode);
+          SerialPrint(F("Interval Mode Selected"), USB_UART_PORT, 1, 1, 0);
+        } else if (gps_response.indexOf(F("SINGLE")) > -1) {
+          gpsmode = SINGLE;
+          EEPROM.write(ADDR_GPSMODE, gpsmode);
+          SerialPrint(F("Single Mode Selected"), USB_UART_PORT, 1, 1, 0);
+        } else {
+          SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+        }
+      }
+    }
+  } else if (gps_response.indexOf(F("DISABLE")) > -1) {
+    gpsmode = DISABLED;
+    EEPROM.write(ADDR_GPSMODE, gpsmode);
+  } else {
+    SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+  }
+  bIssettingUpdateRequired = 1;
+}
+
+/**
+  @brief  Function for time settings.
+*/
+void time_settings() {
+  String time_response = "";
+  SerialPrint(F("Type AUTOTIME, TIMEZONE, or SET"), USB_UART_PORT, 1, 1, 0);
+  SerialDelay(USB_UART_PORT, 300);
+  time_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+
+  if (time_response.indexOf(F("SET")) > -1) {
+    set_device_time();
+  } else if (time_response.indexOf(F("AUTOTIME")) > -1) {
+    SerialPrint(F("Type ENABLE or DISABLE"), USB_UART_PORT, 1, 1, 0);
+    SerialDelay(USB_UART_PORT, 300);
+    time_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+    if (time_response.indexOf(F("ENABLE")) > -1) {
+      autotime = 1;
+      SerialPrint(F("Autotime Enabled"), USB_UART_PORT, 1, 1, 0);
+    } else if (time_response.indexOf(F("DISABLE")) > -1) {
+      autotime = 0;
+      SerialPrint(F("Autotime Disabled"), USB_UART_PORT, 1, 1, 0);
+    } else {
+      SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+    }
+    EEPROM.update(ADDR_AUTOTIME, autotime);
+    bIssettingUpdateRequired = 1;
+  } else if (time_response.indexOf(F("TIMEZONE")) > -1) {
+    SerialPrint(F("Type UTC or LOCAL"), USB_UART_PORT, 1, 1, 0);
+    SerialDelay(USB_UART_PORT, 300);
+    time_response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+    if (time_response.indexOf(F("UTC")) > -1) {
+      tzone = UTC;
+      SerialPrint(F("UTC Time Selected"), USB_UART_PORT, 1, 1, 0);
+    } else if (time_response.indexOf(F("LOCAL")) > -1) {
+      tzone = LOCAL;
+      SerialPrint(F("Local Time Selected"), USB_UART_PORT, 1, 1, 0);
+    } else {
+      SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+    }
+    EEPROM.write(ADDR_TZONE, tzone);
+  }
+}
+
+/**
+  @brief  SET_APN FUNCTION for use in MENU and REMOTE CONFIG
+  @param[in] apn_name: Network APN string
+*/
+void set_apn(String& apn_name) {
+  apn_name.trim();
+  if ((apn_name.length() < 30) && (apn_name.length() > 0)) {
+    apn = apn_name;
+    char cbuff[apn.length() + 1];
+    apn.toCharArray(cbuff, apn.length() + 1);
+    EEPROM.update(ADDR_APN, apn.length());
+    for (uint16_t i = 0; i < apn.length(); i++) {
+      uint8_t val = byte(cbuff[i]) ^ byte(i);
+      EEPROM.update(ADDR_APN + 1 + i, val);
+    }
+    // upgrade = 1;
+    // EEPROM.update(ADDR_UPGRDFLAG, upgrade);
+    if (HIGH == digitalRead(RXpins[USB_UART_RX])) {
+      SerialPrint(F("APN selected: "), USB_UART_PORT, 0, 0, 0);
+      SerialPrint(apn, USB_UART_PORT, 1, 1, 0);
+    }
+  } else {
+    if (HIGH == digitalRead(RXpins[USB_UART_RX])) {
+      SerialPrint(F("APN is not valid: "), USB_UART_PORT, 0, 0, 0);
+      SerialPrint(apn_name, USB_UART_PORT, 1, 1, 0);
+    }
+  }
+}
+
+/**
+  @brief Use in MENU and REMOTE CONFIG
+  @param[in] serverURL server endpoint url to write into EEPROM
+*/
+void set_hostURL(String& serverURL) {
+  serverURL.trim();
+  if ((serverURL.length() < 199) && (serverURL.length() > 10)) {
+    String resp;
+    sendATcommand(0, "AT+QHTTPURL=" + String(serverURL.length()) + ",5", 10, F("CONNECT"));
+    sendATcommand(0, serverURL, 5, F("OK"));
+    resp = sendATcommand(0, F("AT+QHTTPGET=15"), 20, "+QHTTPGET:");  //basic test for connection to server
+
+    if (resp.indexOf(F("0,200")) > -1) {
+      serv_adrs = serverURL;
+      char cbuff[serverURL.length() + 1];
+      serverURL.toCharArray(cbuff, serverURL.length() + 1);
+      EEPROM.update(ADDR_URL, serverURL.length());
+      for (uint16_t i = 0; i < serverURL.length(); i++) {
+        uint8_t val = byte(cbuff[i]) ^ byte(i);
+        EEPROM.update(ADDR_URL + 1 + i, val);
+      }
+      SerialPrint(F("Host Address Updated!"), USB_UART_PORT, 1, 1, 1);
+    } else {
+      SerialPrint(F("Failed to connect with remote HOST URL\n"), USB_UART_PORT, 1, 1, 1);
+    }
+  } else {
+    SerialPrint(F("Host Address Not Valid"), USB_UART_PORT, 1, 1, 1);
+  }
+}
+
+/**
+  @brief SET_PUBLISHER_TOPIC FUNCTION for use in MENU and REMOTE CONFIG
+  @param[in] pub_topic mqtt publish topic write into EEPROM
+*/
+void set_pubTopic(String& pub_topic) {
+  pub_topic.trim();
+  if ((pub_topic.length() < 100) && (pub_topic.length() > 0)) {
+    char cbuff[pub_topic.length() + 1];
+    pub_topic.toCharArray(cbuff, pub_topic.length() + 1);
+    EEPROM.update(ADDR_PUB, pub_topic.length());
+    for (uint16_t i = 0; i < pub_topic.length(); i++) {
+      uint8_t val = byte(cbuff[i]) ^ byte(i);
+      EEPROM.update(ADDR_PUB + 1 + i, val);
+    }
+  } else {
+    SerialPrint(F("PUBLISHER Topic Not Valid"), USB_UART_PORT, 1, 1, 0);
+  }
+}
+
+/**
+  @brief SET_SUBSCRIBER_TOPIC FUNCTION for use in MENU and REMOTE CONFIG
+  @param[in] sub_topic mqtt subscribe topic write into EEPROM
+*/
+void set_subTopic(String& sub_topic) {
+  sub_topic.trim();
+  if ((sub_topic.length() < 100) && (sub_topic.length() > 0)) {
+    char cbuff[sub_topic.length() + 1];
+    sub_topic.toCharArray(cbuff, sub_topic.length() + 1);
+    EEPROM.update(ADDR_SUB, sub_topic.length());
+    for (uint16_t i = 0; i < sub_topic.length(); i++) {
+      uint8_t val = byte(cbuff[i]) ^ byte(i);
+      EEPROM.update(ADDR_SUB + 1 + i, val);
+    }
+  } else {
+    SerialPrint(F("SUBSCRIBER Topic Not Valid"), USB_UART_PORT, 1, 1, 0);
+  }
+}
+
+/**
+  @brief SET_CUSTOMBAND FUNCTION for use in MENU and REMOTE CONFIG.
+  @param[in] custom_band Write custom band to EEPROM
+*/
+bool set_customBand(String& custom_band) {
+  custom_band.trim();
+  if ((custom_band.length() <= 70) && (custom_band.length() > 0)) {
+    //Not storing customband in EEprom, Retriving from modem in startup
+    customband = custom_band;  //Store the customband string in the global variable to use in cell_config(..)
+    return true;
+  } else {
+    SerialPrint(F("CUSTOM BAND provided is invalid! Provided (invalid)CUSTOM-BAND was:"), USB_UART_PORT, 0, 0, 0);
+    SerialPrint(custom_band, USB_UART_PORT, 1, 1, 0);
+  }
+  return false;
+}
+
+/**
+  @brief  SET_RATIO FUNCTION for use in MENU and REMOTE CONFIG
+  @param[in] ratio_input Write Ration value to EEPROM
+*/
+void set_ratio(uint16_t ratio_input) {
+  if ((ratio_input >= RATIO_MIN) && (ratio_input <= RATIO_MAX)) {
+    ratio = ratio_input;
+    if (HIGH == digitalRead(RXpins[USB_UART_RX])) {
+      SerialPrint(F("GSM Ratio: "), USB_UART_PORT, 0, 0, 0);
+      SerialPrint(String(ratio), USB_UART_PORT, 1, 1, 0);
+    }
+    EEPROM.put(ADDR_RATIO, ratio);
+  } else {
+    if (HIGH == digitalRead(RXpins[USB_UART_RX])) {
+      SerialPrint(F("Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+    }
+  }
+}
+
+/**
+  @brief SET_ODR FUNCTION for use in MENU and REMOTE CONFIG
+  @param[in] odr_input Write ODR value to EEPROM
+*/
+void set_odr(uint8_t odr_input) {
+  if ((odr_input >= DATA_DELAY_MIN) && (odr_input <= DATA_DELAY_MAX)) {
+    data_delay = odr_input;
+    if (HIGH == digitalRead(RXpins[USB_UART_RX])) {
+      SerialPrint(F("Output Data Rate : "), USB_UART_PORT, 0, 0, 0);
+      SerialPrint(String(data_delay), USB_UART_PORT, 1, 1, 0);
+    }
+    EEPROM.update(ADDR_ODR, data_delay);
+  } else {
+    if (HIGH == digitalRead(RXpins[USB_UART_RX])) {
+      SerialPrint(F("ODR Input Not Valid"), USB_UART_PORT, 1, 1, 0);
+      SerialPrint(String(odr_input), USB_UART_PORT, 1, 1, 0);
+    }
+  }
+}
+
+/**
+  @brief SET_GPS FUNCTION for use in MENU and REMOTE CONFIG
+  @param[in] gps_input GPS aadress write to EEPROM
+*/
+void set_gps(uint8_t gps_input) {
+  /*GPS is not supported in WIFI mode. Force disable GPS if wifi variable is set to 1*/
+  switch (gps_input) {
+    case DISABLED:
+      gpsmode = DISABLED;
+      EEPROM.update(ADDR_GPSMODE, gpsmode);
+      break;
+
+    case SINGLE:
+      gpsmode = SINGLE;
+      EEPROM.update(ADDR_GPSMODE, gpsmode);
+      break;
+
+    case INTERVAL:
+      if ((MODE_USB == usbmode) || ((HTTP_BUFFERED == protocol) && (data_delay * ratio) >= 600)) {
+        gpsmode = SINGLE;
+        EEPROM.update(ADDR_GPSMODE, gpsmode);
+      } else {
+        gpsmode = INTERVAL;
+        EEPROM.update(ADDR_GPSMODE, gpsmode);
+      }
+      break;
+
+    case CONSTANT:
+      if ((MODE_USB == usbmode) || ((HTTP_BUFFERED == protocol) && (data_delay * ratio) >= 600)) {
+        gpsmode = SINGLE;
+        EEPROM.update(ADDR_GPSMODE, gpsmode);
+      } else {
+        gpsmode = CONSTANT;
+        EEPROM.update(ADDR_GPSMODE, gpsmode);
+      }
+      break;
+
+    case FORCE_SINGLE:
+      if ((MODE_USB == usbmode) || ((HTTP_BUFFERED == protocol) && (data_delay * ratio) >= 600)) {
+        gpsmode = SINGLE;
+        EEPROM.update(ADDR_GPSMODE, gpsmode);
+      } else {
+        gpsmode = FORCE_SINGLE;
+        EEPROM.update(ADDR_GPSMODE, gpsmode);
+      }
+      break;
+  }
+}
+
+/**
+  @brief SET_PMNUM FUNCTION for use in MENU and REMOTE CONFIG
+  @param[in] numberOfPMSensors No of PM sensor write to EEPROM
+*/
+bool set_pmnum(uint8_t numberOfPMSensors) {
+  /*Maximum two PM sensors can be supported. If 0 then no PM sensor configured*/
+  //if ((numberOfPMSensors < 3) && (numberOfPMSensors >=0))  /*byte argument is always 0 or more so checking numberofPMSensors >=0 is not required*/
+  if ((numberOfPMSensors == 0) && (RAMP == deviceType) && (echemnum > 0)) {
+    SerialPrint(F("Atleast 1 PM Sensor of RHT variant must be required for RAMP device! "), USB_UART_PORT, 1, 1, 0);
+    return false;
+  } else if (numberOfPMSensors < 3) {
+    pmnum = numberOfPMSensors;
+    if (HIGH == digitalRead(RXpins[USB_UART_RX])) {
+      SerialPrint(String(pmnum), USB_UART_PORT, 0, 0, 0);
+      SerialPrint(F(" PM Sensor(s) Selected"), USB_UART_PORT, 1, 1, 0);
+    }
+    EEPROM.update(ADDR_PMNUM, pmnum);
+    return true;
+  }
+  return false;
+}
+
+/**
+  @brief SET_ECHEMNUM FUNCTION for use in MENU and REMOTE CONFIG
+  @param[in] numberOfEchemSensors No of EChem sensor write to EEPROM
+*/
+bool set_echemnum(uint8_t numberOfEchemSensors) {
+  if (numberOfEchemSensors < 5) /* Maximum 4 ECHEM sensors can be supported on RAMP, 0 means no Echem*/
+  {
+    echemnum = numberOfEchemSensors;
+    if (HIGH == digitalRead(RXpins[USB_UART_RX])) {
+      SerialPrint(String(echemnum), USB_UART_PORT, 0, 0, 0);
+      SerialPrint(F(" Echem Sensors Selected"), USB_UART_PORT, 1, 1, 0);
+    }
+    EEPROM.update(ADDR_ECHEMNUM, echemnum);
+    return true;
+  }
+  return false;
+}
+
+/**
+  @brief MENU to configure device from debug console.
+  @param[in] selector Selected menu option.
+*/
+void menu(uint8_t selector) {
+  String input = "";
+  String response = "";
+  if (1 == selector) {
+    SerialPrint(F("Type 'YES' To Enter Menu"), USB_UART_PORT, 1, 0, 0);
+    SerialClear(USB_UART_PORT, 1);
+    for (uint8_t countDown = 10; countDown > 0; countDown--) {
+      SerialPrint(String(countDown), USB_UART_PORT, 1, 0, 0);
+      delay(1000);
+      input = SerialRead(USB_UART_PORT, '\n', 1, 1);
+      if (input.length() > 0) {
+        break;
+      }
+    }
+  }
+  SerialPrint("", USB_UART_PORT, 1, 0, 0);
+
+  if (input.indexOf(F("YES")) > -1 || selector != 1) {
+    do {
+      if (1 == selector) {
+        SerialPrint(F("Type CELLULAR, DISPLAY, GPS, OUTPUT, TIME, SYSTEM, EEBACKUP, EERESTORE or EXIT"), USB_UART_PORT, 1, 1, 0);
+        SerialDelay(USB_UART_PORT, 300);
+        response = SerialRead(USB_UART_PORT, '\n', 1, 1);
+        SerialPrint(F("Command Received: "), USB_UART_PORT, 0, 0, 0);
+        SerialPrint(response, USB_UART_PORT, 1, 1, 0);
+      } else {
+        response = F("FACTORY");
+      }
+
+      if (response.indexOf(F("PASSWORD")) > -1) {
+        if (0 == setpass) {
+          SerialPrint(F("Type Passcode To Enable, Max 49 characters"), USB_UART_PORT, 1, 1, 0);
+          SerialDelay(USB_UART_PORT, 300);
+          response = SerialRead(USB_UART_PORT, '\n', 1, 0);
+
+          SerialPrint(F("Password Received: "), USB_UART_PORT, 0, 0, 0);
+          SerialPrint(response, USB_UART_PORT, 1, 1, 0);
+          if (response.length() < 50) {
+
+            char cbuff[response.length() + 1];
+            response.toCharArray(cbuff, response.length() + 1);
+
+            EEPROM.write(ADDR_CREDPASS, response.length());
+            if (response.length() > 0) {
+              for (uint16_t i = 0; i < response.length(); i++) {
+                uint8_t val = byte(cbuff[i]) ^ byte(i);
+                EEPROM.write(ADDR_CREDPASS + 1 + i, val);
+              }
+            }
+            if (1 == confirmpass()) {
+              setpass = 1;
+              EEPROM.write(ADDR_SETPASS, 1);
+            }
+          } else {
+            SerialPrint(F("Incorrect Character Count"), USB_UART_PORT, 1, 1, 0);
+          }
+
+        } else if (1 == setpass) {
+          if (1 == confirmpass()) {
+            setpass = 0;
+            EEPROM.write(ADDR_SETPASS, 0);
+            SerialPrint(F("Password Disabled"), USB_UART_PORT, 1, 1, 0);
+          }
+        }
+      }
+
+      if (response.indexOf(F("GPS")) > -1) {
+        gps_settings();
+      }
+
+      if (response.indexOf(F("CELLULAR")) > -1) {
+        cellular_settings();
+      }
+
+      if (response.indexOf(F("DISPLAY")) > -1) {
+        EEPROM_read();
+        SRAM_print();
+      }
+
+      if (response.indexOf(F("TIME")) > -1) {
+        time_settings();
+      }
+
+      if (response.indexOf(F("IDNUM")) > -1) {
+        set_device_id();
+      }
+
+
+      if (response.indexOf(F("OUTPUT")) > -1) {
+        output_settings();
+      }
+
+      if (response.indexOf(F("SYSTEM")) > -1) {
+        system_settings();
+      }
+
+      /*if (response.indexOf(F("UPGRADE")) > -1) {
+        upgradefunc();
+        }*/
+
+      if (response.indexOf(F("DEBUG")) > -1) {
+        uint8_t access = 0;
+        if (setpass == 0) {
+          access = 1;
+        } else if (setpass == 1) {
+          if (confirmpass() == 1) {
+            access = 1;
+          }
+        }
+        if (access == 1) {
+          SerialPrint(F("Debug Output Enabled"), USB_UART_PORT, 1, 1, 0);
+          debug = 1;
+        }
+      }
+      if (response.indexOf(F("FACTORY")) > -1) {
+        SerialPrint(F("Enter Factory Reset Password:"), USB_UART_PORT, 1, 1, 0);
+        SerialDelay(USB_UART_PORT, 300);
+        while (!Serial.available())
+          ;
+        String pass = SerialRead(USB_UART_PORT, '\n', 1, 0);
+        if (FACTORY_PASSWORD == pass.toInt()) {
+          factory_settings();
+          selector = 1;
+          EEPROM.update(ADDR_NEW, selector);
+        } else {
+          SerialPrint(F("Wrong Password!!! Try Again..."), USB_UART_PORT, 1, 0, 0);
+        }
+      }
+
+      if (response.indexOf(F("EEBACKUP")) > -1) {
+        SerialPrint(F("Start to take backup of EEprom"), USB_UART_PORT, 1, 1, 0);
+        SaveEEPromSetting();
+      }
+
+      if (response.indexOf(F("EERESTORE")) > -1) {
+        SerialPrint(F("Start to retrive EEprom from Sd card"), USB_UART_PORT, 1, 1, 0);
+        RetrieveEESetting();
+      }
+
+      if (RAMP == deviceType) {
+        if (response.indexOf(F("CO2CAL")) > -1) {
+          SerialPrint(F("SENSEAIR CO2 Calibration"), USB_UART_PORT, 1, 1, 0);
+          SerialPrint(F("Use CO2 concetraion between 400 to 2000 ppm for calibration..."), USB_UART_PORT, 1, 0, 0);
+          SenseAirCalibration();
+        }
+      }
+
+      if (response.indexOf(F("EXIT")) > -1) {
+        menu_flag = 1;
+        EEPROM_read();
+        SRAM_print();
+        break;
+      }
+    } while (menu_flag == 0);
+  } else if (input.indexOf(F("CAL")) > -1) {
+    usbmode = MODE_USB;
+    SerialPrint(F("Entering Calibration Mode"), USB_UART_PORT, 1, 1, 0);
+  }
+}
