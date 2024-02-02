@@ -1,1 +1,8 @@
+<<<<<<< HEAD
 1.
+=======
+This is a git demo text file.
+1. This is first reset commit.
+1. This is second reset commit.
+1. This is Third reset commit.
+>>>>>>> affd9832939df0baf3c861690990ad73a8560e71
