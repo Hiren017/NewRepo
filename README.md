@@ -1,2 +1,1 @@
-# NewRepo
-This is regarding the new course I have opted for.
+Merged everything into main branch.
