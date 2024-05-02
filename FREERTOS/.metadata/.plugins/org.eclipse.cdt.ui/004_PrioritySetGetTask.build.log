@@ -1,0 +1,11 @@
+09:56:10 **** Incremental Build of configuration Debug for project 004_PrioritySetGetTask ****
+make -j12 all 
+arm-none-eabi-gcc -o "004_PrioritySetGetTask.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\Non-Project\FREERTOS\004_PrioritySetGetTask\STM32L476RGTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="004_PrioritySetGetTask.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+D:/Non-Project/STM CubeIDE/STM32CubeIDE_1.14.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.11.3.rel1.win32_1.1.100.202309141235/tools/bin/../lib/gcc/arm-none-eabi/11.3.1/../../../../arm-none-eabi/bin/ld.exe: ./CommonRTOS/ThirdParty/FreeRTOS/tasks.o: in function `vTaskPrioritySet':
+D:/Non-Project/FREERTOS/CommonRTOS/ThirdParty/FreeRTOS/tasks.c:1644: undefined reference to `prvReaddTaskToReadyList'
+collect2.exe: error: ld returned 1 exit status
+make: *** [makefile:72: 004_PrioritySetGetTask.elf] Error 1
+"make -j12 all" terminated with exit code 2. Build might be incomplete.
+
+09:56:11 Build Failed. 2 errors, 0 warnings. (took 811ms)
+

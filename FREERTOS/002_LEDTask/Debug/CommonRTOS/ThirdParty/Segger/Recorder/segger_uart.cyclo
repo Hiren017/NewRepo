@@ -1,0 +1,10 @@
+../Drivers/CMSIS/Include/core_cm4.h:1679:22:__NVIC_EnableIRQ	2
+../Drivers/CMSIS/Include/core_cm4.h:1809:22:__NVIC_SetPriority	2
+D:/Non-Project/FREERTOS/CommonRTOS/ThirdParty/Segger/Recorder/segger_uart.c:108:13:_StartSysView	2
+D:/Non-Project/FREERTOS/CommonRTOS/ThirdParty/Segger/Recorder/segger_uart.c:117:13:_cbOnUARTRx	2
+D:/Non-Project/FREERTOS/CommonRTOS/ThirdParty/Segger/Recorder/segger_uart.c:128:12:_cbOnUARTTx	3
+D:/Non-Project/FREERTOS/CommonRTOS/ThirdParty/Segger/Recorder/segger_uart.c:145:6:SEGGER_UART_init	1
+D:/Non-Project/FREERTOS/CommonRTOS/ThirdParty/Segger/Recorder/segger_uart.c:155:6:HIF_UART_WaitForTxEnd	3
+D:/Non-Project/FREERTOS/CommonRTOS/ThirdParty/Segger/Recorder/segger_uart.c:176:6:USART2_IRQHandler	7
+D:/Non-Project/FREERTOS/CommonRTOS/ThirdParty/Segger/Recorder/segger_uart.c:214:6:HIF_UART_EnableTXEInterrupt	1
+D:/Non-Project/FREERTOS/CommonRTOS/ThirdParty/Segger/Recorder/segger_uart.c:224:6:HIF_UART_Init	3
